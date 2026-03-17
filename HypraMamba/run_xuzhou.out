@@ -1,0 +1,169 @@
+/data2/gyp/HyPyraMamba/HypraMamba/train.py:32: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = GradScaler()
+[I 260317 17:44:10 train:112] ./RUNS/MambaHSI/XuZhou
+[I 260317 17:44:13 train:170] {'net_name': 'MambaHSI', 'dataset_index': 8, 'num_list': [30, 10], 'lr': 0.0003, 'seed_list': [0, 1, 2]}
+[I 260317 17:44:13 train:171] ImprovedMambaHSI(
+      (patch_embedding): Sequential(
+        (0): Conv2d(30, 128, kernel_size=(1, 1), stride=(1, 1))
+        (1): GroupNorm(4, 128, eps=1e-05, affine=True)
+        (2): SiLU()
+      )
+      (mamba): Sequential(
+        (0): ImprovedBothMamba(
+          (spa_mamba): ImprovedSpaMamba(
+            (pyramid_refined_attention): PyramidRefinedChannelAttention(
+              (attention_modules): ModuleList(
+                (0-2): 3 x PyramidAttention(
+                  (qkv): Conv2d(128, 384, kernel_size=(1, 1), stride=(1, 1))
+                  (qkv_dwconv): Conv2d(384, 384, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), groups=384)
+                  (project_out): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1))
+                )
+              )
+              (attention_layers): ModuleList(
+                (0-2): 3 x ModuleList(
+                  (0-1): 2 x PyramidAttention(
+                    (qkv): Conv2d(128, 384, kernel_size=(1, 1), stride=(1, 1))
+                    (qkv_dwconv): Conv2d(384, 384, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), groups=384)
+                    (project_out): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1))
+                  )
+                )
+              )
+              (project_out): Conv2d(384, 128, kernel_size=(1, 1), stride=(1, 1))
+            )
+            (mamba): Mamba(
+              (in_proj): Linear(in_features=128, out_features=512, bias=False)
+              (conv1d): Conv1d(256, 256, kernel_size=(4,), stride=(1,), padding=(3,), groups=256)
+              (act): SiLU()
+              (x_proj): Linear(in_features=256, out_features=40, bias=False)
+              (dt_proj): Linear(in_features=8, out_features=256, bias=True)
+              (out_proj): Linear(in_features=256, out_features=128, bias=False)
+            )
+            (multi_scale_conv): MultiScaleConv(
+              (conv1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+              (conv2): Conv2d(128, 128, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2))
+              (conv3): Conv2d(128, 128, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3))
+              (conv4): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1))
+              (final_conv): Conv2d(512, 128, kernel_size=(1, 1), stride=(1, 1))
+              (norm): GroupNorm(1, 128, eps=1e-05, affine=True)
+              (activation): ReLU()
+              (attention): ChannelAttention(
+                (avg_pool): AdaptiveAvgPool2d(output_size=1)
+                (fc1): Conv2d(128, 8, kernel_size=(1, 1), stride=(1, 1), bias=False)
+                (relu): ReLU()
+                (fc2): Conv2d(8, 128, kernel_size=(1, 1), stride=(1, 1), bias=False)
+                (sigmoid): Sigmoid()
+              )
+            )
+            (scsa): SCSA(
+              (local_dwc): Conv1d(32, 32, kernel_size=(3,), stride=(1,), padding=(1,), groups=32)
+              (global_dwcs): ModuleList(
+                (0): Conv1d(32, 32, kernel_size=(5,), stride=(1,), padding=(2,), groups=32)
+                (1): Conv1d(32, 32, kernel_size=(7,), stride=(1,), padding=(3,), groups=32)
+                (2): Conv1d(32, 32, kernel_size=(9,), stride=(1,), padding=(4,), groups=32)
+              )
+              (sa_gate): Sigmoid()
+              (norm_h): GroupNorm(4, 128, eps=1e-05, affine=True)
+              (norm_w): GroupNorm(4, 128, eps=1e-05, affine=True)
+              (conv_d): Identity()
+              (norm): GroupNorm(1, 128, eps=1e-05, affine=True)
+              (q): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1), groups=128, bias=False)
+              (k): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1), groups=128, bias=False)
+              (v): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1), groups=128, bias=False)
+              (attn_drop): Dropout(p=0.0, inplace=False)
+              (ca_gate): Sigmoid()
+              (down_func): AvgPool2d(kernel_size=(7, 7), stride=7, padding=0)
+            )
+            (proj): Sequential(
+              (0): GroupNorm(4, 128, eps=1e-05, affine=True)
+              (1): SiLU()
+            )
+          )
+          (spe_mamba): ImprovedSpeMamba(
+            (pyramid_refined_attention): PyramidRefinedChannelAttention(
+              (attention_modules): ModuleList(
+                (0-2): 3 x PyramidAttention(
+                  (qkv): Conv2d(128, 384, kernel_size=(1, 1), stride=(1, 1))
+                  (qkv_dwconv): Conv2d(384, 384, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), groups=384)
+                  (project_out): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1))
+                )
+              )
+              (attention_layers): ModuleList(
+                (0-2): 3 x ModuleList(
+                  (0-1): 2 x PyramidAttention(
+                    (qkv): Conv2d(128, 384, kernel_size=(1, 1), stride=(1, 1))
+                    (qkv_dwconv): Conv2d(384, 384, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), groups=384)
+                    (project_out): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1))
+                  )
+                )
+              )
+              (project_out): Conv2d(384, 128, kernel_size=(1, 1), stride=(1, 1))
+            )
+            (mamba): Mamba(
+              (in_proj): Linear(in_features=32, out_features=128, bias=False)
+              (conv1d): Conv1d(64, 64, kernel_size=(4,), stride=(1,), padding=(3,), groups=64)
+              (act): SiLU()
+              (x_proj): Linear(in_features=64, out_features=34, bias=False)
+              (dt_proj): Linear(in_features=2, out_features=64, bias=True)
+              (out_proj): Linear(in_features=64, out_features=32, bias=False)
+            )
+            (proj): Sequential(
+              (0): GroupNorm(4, 128, eps=1e-05, affine=True)
+              (1): SiLU()
+            )
+          )
+          (attention): Sequential(
+            (0): Conv2d(256, 128, kernel_size=(1, 1), stride=(1, 1))
+            (1): SiLU()
+            (2): Conv2d(128, 1, kernel_size=(1, 1), stride=(1, 1))
+            (3): Sigmoid()
+          )
+        )
+        (1): AvgPool2d(kernel_size=2, stride=2, padding=0)
+      )
+      (dynamic_conv): DynamicConvBlock(
+        (attention): Sequential(
+          (0): AdaptiveAvgPool2d(output_size=1)
+          (1): Conv2d(128, 32, kernel_size=(1, 1), stride=(1, 1))
+          (2): ReLU()
+          (3): Conv2d(32, 4, kernel_size=(1, 1), stride=(1, 1))
+          (4): Softmax(dim=1)
+        )
+        (convs): ModuleList(
+          (0-3): 4 x Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=128)
+        )
+        (norm): GroupNorm(1, 128, eps=1e-05, affine=True)
+        (dropout): Dropout(p=0.1, inplace=False)
+        (activation): SiLU()
+      )
+      (cls_head): Sequential(
+        (0): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1))
+        (1): GroupNorm(4, 128, eps=1e-05, affine=True)
+        (2): SiLU()
+        (3): Conv2d(128, 9, kernel_size=(1, 1), stride=(1, 1))
+      )
+      (upsample): Upsample(scale_factor=2.0, mode='bilinear')
+    )
+[I 260317 17:44:14 train:190] Adam (
+    Parameter Group 0
+        amsgrad: False
+        betas: (0.9, 0.999)
+        capturable: False
+        decoupled_weight_decay: False
+        differentiable: False
+        eps: 1e-08
+        foreach: None
+        fused: None
+        lr: 0.0003
+        maximize: False
+        weight_decay: 1e-05
+    )
+/data2/gyp/HyPyraMamba/HypraMamba/train.py:239: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast():
+/data2/gyp/HyPyraMamba/HypraMamba/utils/Loss.py:19: UserWarning: When align_corners=True, the output would more aligned if input size (250, 130) is `x+1` and out size (500, 260) is `nx+1`
+  warnings.warn(
+[I 260317 17:44:43 train:289] Evaluate 0|OA:0.1111111111111111|MACC:0.1111111111111111|Kappa:0.0|MIOU:0.028898816910730533|IOU:[0.         0.         0.10126582 0.         0.         0.
+     0.05882353 0.1        0.        ]|ACC:[0.  0.  0.8 0.  0.  0.  0.1 0.1 0. ]
+[I 260317 17:45:10 train:289] Evaluate 1|OA:0.13333333333333333|MACC:0.13333333333333333|Kappa:0.025000000000000005|MIOU:0.05254161532700346|IOU:[0.         0.         0.09589041 0.07142857 0.         0.
+     0.05555556 0.25       0.        ]|ACC:[0.  0.  0.7 0.1 0.  0.  0.1 0.3 0. ]
+[I 260317 17:45:36 train:289] Evaluate 2|OA:0.17777777777777778|MACC:0.17777777777777776|Kappa:0.07500000000000002|MIOU:0.08171610524551702|IOU:[0.         0.         0.09230769 0.2        0.         0.
+     0.17647059 0.26666667 0.        ]|ACC:[0.  0.  0.6 0.3 0.  0.  0.3 0.4 0. ]
