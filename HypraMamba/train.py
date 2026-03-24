@@ -2,7 +2,7 @@ import sys
 import os
 # sys.path.append('/content/drive/MyDrive/hyperspectral classification/MambaHSI')
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-os.environ['CUDA_VISIBLE_DEVICES']='0' #选择服务器
+#os.environ['CUDA_VISIBLE_DEVICES']='0' #选择服务器
 import time
 import torch
 import random
@@ -73,8 +73,8 @@ args \
     = get_parser()
 record_computecost = args.record_computecost
 exp_name = args.exp_name
-# seed_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-seed_list = [0, 1, 2]
+seed_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+#seed_list = [0, 1, 2]
 num_list = [args.train_samples, args.val_samples] # 用于存储训练样本数和验证样本数
 
 dataset_index = args.dataset_index # 选择的数据集索引（如 0、1、2 等），通过索引选择不同的数据集。
@@ -127,7 +127,7 @@ if __name__ == '__main__':
     height, width, channels = data_pca.shape
     gt_reshape = gt.reshape(-1)
     img = ImageStretching(data_pca)
-    class_count = max(np.unique(gt)) # 计算类别数量
+    class_count = int(max(np.unique(gt)))
 
     flag_list = [1, 0]  # ratio or num
     ratio_list = [0.1, 0.01]  # [train_ratio, val_ratio]

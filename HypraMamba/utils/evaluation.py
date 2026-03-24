@@ -3,7 +3,7 @@ import numpy as np
 
 class Evaluator(object):
     def __init__(self, num_class):
-        self.num_class = num_class
+        self.num_class = int(num_class)
         self.confusion_matrix = np.zeros((self.num_class,) * 2)
         # matrix shape(num_class, num_class) with elements 0 in our match. it will be 4*4
 
