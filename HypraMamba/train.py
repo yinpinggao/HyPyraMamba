@@ -4,11 +4,11 @@ import os
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 #os.environ['CUDA_VISIBLE_DEVICES']='0' #选择服务器
 import time
-import torch
 import random
 import argparse
 import numpy as np
-from torchvision import models, transforms
+import torch
+from torchvision import transforms
 # import matplotlib.pyplot as plt
 # from visual.visualize_map import DrawResult
 import utils.data_load_operate as data_load_operate
@@ -23,8 +23,6 @@ from calflops import calculate_flops
 from sklearn.decomposition import PCA
 from scipy.ndimage import gaussian_filter
 from torch.cuda.amp import autocast, GradScaler
-from torchvision import transforms
-import torch
 
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:64,garbage_collection_threshold:0.6'
 torch.autograd.set_detect_anomaly(True)
@@ -51,19 +49,157 @@ def setup_seed(seed):
     torch.backends.cudnn.deterministic = True  # 确保每次计算的结果是确定性的
     torch.backends.cudnn.benchmark = False  # 禁用 cuDNN 自动优化，确保每次运行的一致性
 
+
+def str2bool(value):
+    if isinstance(value, bool):
+        return value
+    lowered = value.lower()
+    if lowered in {'true', '1', 'yes', 'y'}:
+        return True
+    if lowered in {'false', '0', 'no', 'n'}:
+        return False
+    raise argparse.ArgumentTypeError(f'Invalid boolean value: {value}')
+
+
+def build_model_kwargs(args):
+    preset = {}
+    if args.model_variant == 'litepyramamba':
+        preset = {
+            'shared_attention_mode': 'lite_psa',
+            'attention_mode': 'none',
+            'spatial_mode': 'dwconv_mamba',
+            'fusion_mode': 'cross_gate',
+            'dynamic_conv_mode': 'shared',
+            'cls_hidden_dim': 0,
+        }
+
+    model_kwargs = {
+        'hidden_dim': args.hidden_dim,
+        'mamba_type': args.mamba_type,
+        'token_num': args.token_num,
+        'group_num': args.group_num,
+        'attention_mode': args.attention_mode if args.attention_mode is not None else preset.get('attention_mode', 'prca'),
+        'shared_attention_mode': args.shared_attention_mode if args.shared_attention_mode is not None else preset.get('shared_attention_mode', 'none'),
+        'spatial_mode': args.spatial_mode if args.spatial_mode is not None else preset.get('spatial_mode', 'baseline'),
+        'fusion_mode': args.fusion_mode if args.fusion_mode is not None else preset.get('fusion_mode', 'attention'),
+        'dynamic_conv_mode': args.dynamic_conv_mode if args.dynamic_conv_mode is not None else preset.get('dynamic_conv_mode', 'dynamic'),
+        'cls_hidden_dim': args.cls_hidden_dim if args.cls_hidden_dim is not None else preset.get('cls_hidden_dim', 128),
+    }
+    return model_kwargs
+
+
+def build_model(channels, class_count, model_kwargs):
+    return MambaHSI(
+        in_channels=channels,
+        num_classes=class_count,
+        **model_kwargs,
+    )
+
+
+def count_trainable_params(module):
+    return sum(param.numel() for param in module.parameters() if param.requires_grad)
+
+
+def log_model_statistics(logger, net):
+    total_params = count_trainable_params(net)
+    logger.info(f'trainable_params={total_params}')
+
+    module_stats = {
+        'patch_embedding': count_trainable_params(net.patch_embedding),
+        'shared_attention': count_trainable_params(net.shared_attention),
+        'mamba_backbone': count_trainable_params(net.mamba),
+        'dynamic_conv': count_trainable_params(net.dynamic_conv),
+        'cls_head': count_trainable_params(net.cls_head),
+    }
+    logger.info(f'module_param_breakdown={module_stats}')
+
+    backbone = net.mamba[0]
+    if hasattr(backbone, 'spa_mamba') and hasattr(backbone, 'spe_mamba'):
+        branch_stats = {
+            'spa_mamba': count_trainable_params(backbone.spa_mamba),
+            'spe_mamba': count_trainable_params(backbone.spe_mamba),
+            'fusion': count_trainable_params(backbone.fusion),
+        }
+        logger.info(f'branch_param_breakdown={branch_stats}')
+
+
+def format_model_descriptor(args, net_name, dataset_name, model_kwargs):
+    run = sanitize_run_name(args.run_name) or 'default_save_dir'
+    return (
+        f"model_variant={args.model_variant}, net_name={net_name}, dataset={dataset_name}, run_name={run}, "
+        f"mamba_type={model_kwargs['mamba_type']}, hidden_dim={model_kwargs['hidden_dim']}, "
+        f"attention_mode={model_kwargs['attention_mode']}, shared_attention_mode={model_kwargs['shared_attention_mode']}, "
+        f"spatial_mode={model_kwargs['spatial_mode']}, fusion_mode={model_kwargs['fusion_mode']}, "
+        f"dynamic_conv_mode={model_kwargs['dynamic_conv_mode']}, cls_hidden_dim={model_kwargs['cls_hidden_dim']}"
+    )
+
+
+def profile_model_compute(net, input_shape_nchw, logger):
+    net.eval()
+    params = count_trainable_params(net)
+    flops_str = 'N/A'
+    macs_str = 'N/A'
+    calflops_para = 'N/A'
+    err = None
+    try:
+        flops, macs, calflops_para = calculate_flops(model=net, input_shape=input_shape_nchw)
+        flops_str = str(flops)
+        macs_str = str(macs)
+    except Exception as exc:
+        err = str(exc)
+        logger.warning(f'calculate_flops failed: {err}')
+    return params, flops_str, macs_str, calflops_para, err
+
+
+def emit_final_model_report(logger, lines):
+    banner = '\n==================== Final model report ========================='
+    logger.info(banner)
+    for line in lines:
+        logger.info(line)
+        print(line)
+    logger.info('================================================================')
+
+def sanitize_run_name(run_name):
+    if run_name is None:
+        return None
+    s = str(run_name).strip()
+    if not s:
+        return None
+    for bad in ('..', os.sep, '/', '\\'):
+        s = s.replace(bad, '_')
+    return s or None
+
+
 def get_parser():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_index', type=int, default=8)
     parser.add_argument('--data_set_path', type=str, default='./data')
     parser.add_argument('--work_dir', type=str, default='./')
+    parser.add_argument(
+        '--run_name',
+        type=str,
+        default='',
+        help='Optional subfolder under <exp>/<net>/<dataset>/ so parallel ablations do not overwrite each other.',
+    )
 
     parser.add_argument('--lr', type=float, default=0.0003)
     parser.add_argument('--max_epoch', type=int, default=200)
     parser.add_argument('--train_samples', type=int, default=30)
     parser.add_argument('--val_samples', type=int, default=10)
     parser.add_argument('--exp_name', type=str, default='RUNS')
-    parser.add_argument('--record_computecost', type=bool, default=False)
+    parser.add_argument('--record_computecost', type=str2bool, default=False)
+    parser.add_argument('--model_variant', type=str, default='improved', choices=['improved', 'litepyramamba'])
+    parser.add_argument('--hidden_dim', type=int, default=128)
+    parser.add_argument('--mamba_type', type=str, default='both', choices=['spa', 'spe', 'both'])
+    parser.add_argument('--attention_mode', type=str, default=None, choices=['prca', 'lite_psa', 'none'])
+    parser.add_argument('--shared_attention_mode', type=str, default=None, choices=['prca', 'lite_psa', 'none'])
+    parser.add_argument('--spatial_mode', type=str, default=None, choices=['baseline', 'dwconv_mamba'])
+    parser.add_argument('--fusion_mode', type=str, default=None, choices=['attention', 'cross_gate'])
+    parser.add_argument('--dynamic_conv_mode', type=str, default=None, choices=['dynamic', 'shared', 'none'])
+    parser.add_argument('--cls_hidden_dim', type=int, default=None)
+    parser.add_argument('--token_num', type=int, default=4)
+    parser.add_argument('--group_num', type=int, default=4)
 
     args = parser.parse_args()
     return args
@@ -73,15 +209,24 @@ args \
     = get_parser()
 record_computecost = args.record_computecost
 exp_name = args.exp_name
-seed_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-#seed_list = [0, 1, 2]
+seed_list = [0, 1, 2]
 num_list = [args.train_samples, args.val_samples] # 用于存储训练样本数和验证样本数
 
 dataset_index = args.dataset_index # 选择的数据集索引（如 0、1、2 等），通过索引选择不同的数据集。
 max_epoch = args.max_epoch
 learning_rate = args.lr
-net_name = 'MambaHSI'
-paras_dict = {'net_name': net_name, 'dataset_index': dataset_index, 'num_list': num_list, 'lr': learning_rate, 'seed_list': seed_list}
+model_kwargs = build_model_kwargs(args)
+net_name = 'LitePyraMamba' if args.model_variant == 'litepyramamba' else 'MambaHSI'
+paras_dict = {
+    'net_name': net_name,
+    'dataset_index': dataset_index,
+    'num_list': num_list,
+    'lr': learning_rate,
+    'seed_list': seed_list,
+    'model_variant': args.model_variant,
+    'run_name': sanitize_run_name(args.run_name) or '',
+    **model_kwargs,
+}
 data_set_name_list = ['UP', 'HanChuan', 'HongHu', 'Houston','LongKou','Salinas','indian','Botswana','XuZhou','Pavia']
 data_set_name = data_set_name_list[dataset_index]
 split_image = data_set_name in ['HanChuan', 'Houston','Pavia']
@@ -98,7 +243,11 @@ if __name__ == '__main__':
     dataset_name = data_set_name # UP 。。。
     exp_name = args.exp_name
 
-    save_folder = os.path.join(work_dir, exp_name, net_name, dataset_name) # './RUNS/MambaHSI/UP'
+    run_name_safe = sanitize_run_name(args.run_name)
+    if run_name_safe:
+        save_folder = os.path.join(work_dir, exp_name, net_name, dataset_name, run_name_safe)
+    else:
+        save_folder = os.path.join(work_dir, exp_name, net_name, dataset_name)
     # 路径不存在创建路径
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
@@ -165,10 +314,11 @@ if __name__ == '__main__':
         train_label, val_label, test_label = data_load_operate.generate_image_iter(data_pca, height, width, gt_reshape, index)
 
         # build Model  单GPU
-        net = MambaHSI(in_channels=channels, num_classes=class_count, hidden_dim=128)
+        net = build_model(channels, class_count, model_kwargs)
 
         logger.info(paras_dict)
         logger.info(net)
+        log_model_statistics(logger, net)
 
         x = transform(np.array(img))
         x = x.unsqueeze(0).float().to(device)
@@ -311,7 +461,7 @@ if __name__ == '__main__':
 
         load_weight_path = save_weight_path
         net.update_params = None
-        best_net = MambaHSI(in_channels=channels, num_classes=class_count, hidden_dim=128)
+        best_net = build_model(channels, class_count, model_kwargs)
         best_net.to(device)
         best_net.load_state_dict(torch.load(load_weight_path))
         best_net.eval()
@@ -365,7 +515,7 @@ if __name__ == '__main__':
         Test_Time_ALL.append(test_time)
 
         torch.cuda.empty_cache()
-            # Summarize the results across all runs
+
     OA_ALL = np.array(OA_ALL)
     AA_ALL = np.array(AA_ALL)
     KPP_ALL = np.array(KPP_ALL)
@@ -424,6 +574,29 @@ if __name__ == '__main__':
             np.round(np.std(Test_Time_ALL) * 100, decimals=3))
         f.write(str_results)
 
+    model_descriptor = format_model_descriptor(args, net_name, dataset_name, model_kwargs)
+    profile_net = build_model(channels, class_count, model_kwargs)
+    profile_net.to(device)
+    input_shape_nchw = (1, int(channels), int(height), int(width))
+    params, flops_str, macs_str, cf_para, flop_err = profile_model_compute(
+        profile_net, input_shape_nchw, logger
+    )
+    final_lines = [
+        f"改进/实验配置: {model_descriptor}",
+        f"input_shape_NCHW: {input_shape_nchw}",
+        f"trainable_params: {params}",
+        f"FLOPS (calflops): {flops_str}",
+        f"MACs (calflops): {macs_str}",
+        f"calflops_reported_params: {cf_para}",
+    ]
+    if flop_err:
+        final_lines.append(f"FLOPS_error: {flop_err}")
+    emit_final_model_report(logger, final_lines)
+    with open(mean_result_path, 'a', encoding='utf-8') as f:
+        f.write("\n\n*************** Final model report (params / FLOPS) ********************\n")
+        f.write("\n".join(final_lines) + "\n")
+
+    del profile_net
     del net
 
 # Optional cleanup

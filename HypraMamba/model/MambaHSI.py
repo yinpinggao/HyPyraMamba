@@ -1,12 +1,11 @@
 import math
+import typing as t
+
 import torch
-from torch import nn
-from mamba_ssm import Mamba
-from torch.cuda.amp import autocast
 import torch.nn.functional as F
 from einops import rearrange
-import typing as t
-from torch import nn, einsum
+from mamba_ssm import Mamba
+from torch import nn
 
 class SCSA(nn.Module):
     def __init__(self,
@@ -241,6 +240,76 @@ class PyramidRefinedChannelAttention(nn.Module):
         return out
 
 
+class LitePSA(nn.Module):
+    def __init__(self, dim, num_heads, bias, num_scales=3, se_ratio=4):
+        super(LitePSA, self).__init__()
+        self.num_heads = num_heads
+        self.num_scales = num_scales
+        self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
+
+        self.qkv = nn.Conv2d(dim, dim * 3, kernel_size=1, bias=bias)
+        self.qkv_dwconv = nn.Conv2d(
+            dim * 3,
+            dim * 3,
+            kernel_size=3,
+            stride=1,
+            dilation=2,
+            padding=2,
+            groups=dim * 3,
+            bias=bias,
+        )
+        self.project_out = nn.Conv2d(dim * num_scales, dim, kernel_size=1, bias=bias)
+
+        se_hidden = max(dim // se_ratio, 4)
+        self.se = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(dim, se_hidden, kernel_size=1, bias=False),
+            nn.SiLU(),
+            nn.Conv2d(se_hidden, dim, kernel_size=1, bias=False),
+            nn.Sigmoid(),
+        )
+
+    def _attention(self, x):
+        _, _, h, w = x.shape
+        qkv = self.qkv_dwconv(self.qkv(x))
+        q, k, v = qkv.chunk(3, dim=1)
+
+        q = rearrange(q, 'b (head d) h w -> b head d (h w)', head=self.num_heads)
+        k = rearrange(k, 'b (head d) h w -> b head d (h w)', head=self.num_heads)
+        v = rearrange(v, 'b (head d) h w -> b head d (h w)', head=self.num_heads)
+
+        q = F.normalize(q, dim=-1)
+        k = F.normalize(k, dim=-1)
+
+        attn = (q @ k.transpose(-2, -1)) * self.temperature
+        attn = attn.softmax(dim=-1)
+        out = attn @ v
+        return rearrange(out, 'b head d (h w) -> b (head d) h w', h=h, w=w)
+
+    def forward(self, x):
+        _, _, h, w = x.shape
+        outputs = []
+
+        for scale_idx in range(self.num_scales):
+            if scale_idx == 0:
+                scaled_input = x
+            else:
+                stride = 2 ** scale_idx
+                scaled_input = F.avg_pool2d(x, kernel_size=stride, stride=stride)
+
+            scaled_out = self._attention(scaled_input)
+            if scale_idx > 0:
+                scaled_out = F.interpolate(
+                    scaled_out,
+                    size=(h, w),
+                    mode='bilinear',
+                    align_corners=False,
+                )
+            outputs.append(scaled_out)
+
+        out = self.project_out(torch.cat(outputs, dim=1))
+        return out * self.se(out)
+
 
 class MultiScaleConv(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -310,6 +379,59 @@ class DynamicConvBlock(nn.Module):
         return x
 
 
+class SharedDynamicConvBlock(nn.Module):
+    def __init__(self, channels, kernel_size=3, num_experts=2, reduction=4, dropout=0.1):
+        super(SharedDynamicConvBlock, self).__init__()
+        self.channels = channels
+        self.num_experts = num_experts
+
+        self.attention = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(channels, channels // reduction, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv2d(channels // reduction, num_experts, kernel_size=1),
+            nn.Softmax(dim=1)
+        )
+
+        self.base_conv = nn.Conv2d(
+            channels,
+            channels,
+            kernel_size=kernel_size,
+            padding=kernel_size // 2,
+            groups=channels,
+            bias=False,
+        )
+        self.residual_convs = nn.ModuleList([
+            nn.Conv2d(
+                channels,
+                channels,
+                kernel_size=kernel_size,
+                padding=kernel_size // 2,
+                groups=channels,
+                bias=False,
+            )
+            for _ in range(num_experts)
+        ])
+
+        self.norm = nn.GroupNorm(1, channels)
+        self.dropout = nn.Dropout(dropout)
+        self.activation = nn.SiLU()
+
+    def forward(self, x):
+        b, _, _, _ = x.shape
+        attention_weights = self.attention(x).view(b, self.num_experts, 1, 1, 1)
+
+        base = self.base_conv(x)
+        outputs = [(base + conv(x)).unsqueeze(1) for conv in self.residual_convs]
+        outputs = torch.cat(outputs, dim=1)
+
+        x = (outputs * attention_weights).sum(dim=1)
+        x = self.norm(x)
+        x = self.activation(x)
+        x = self.dropout(x)
+        return x
+
+
 class ChannelAttention(nn.Module):
     def __init__(self, in_channels, reduction=16):
         super(ChannelAttention, self).__init__()
@@ -327,79 +449,158 @@ class ChannelAttention(nn.Module):
         return x * self.sigmoid(y)
 
 
+class AttentionFusion(nn.Module):
+    def __init__(self, channels):
+        super(AttentionFusion, self).__init__()
+        self.attention = nn.Sequential(
+            nn.Conv2d(2 * channels, channels, kernel_size=1),
+            nn.SiLU(),
+            nn.Conv2d(channels, 1, kernel_size=1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, spa_feat, spe_feat):
+        fused_input = torch.cat([spa_feat, spe_feat], dim=1)
+        attention_map = self.attention(fused_input)
+        spa_x_attended = spa_feat * attention_map
+        spe_x_attended = spe_feat * (1 - attention_map)
+        return spa_x_attended + spe_x_attended
+
+
+class CrossGateFusion(nn.Module):
+    def __init__(self, channels):
+        super(CrossGateFusion, self).__init__()
+        self.gate_spa = nn.Conv2d(channels, channels, kernel_size=1, bias=False)
+        self.gate_spe = nn.Conv2d(channels, channels, kernel_size=1, bias=False)
+
+    def forward(self, spa_feat, spe_feat):
+        g_spa = torch.sigmoid(self.gate_spa(spe_feat))
+        g_spe = torch.sigmoid(self.gate_spe(spa_feat))
+        return g_spa * spa_feat + g_spe * spe_feat
+
+
+def build_attention_module(attention_mode, dim, num_heads=4, bias=True, num_scales=3, num_layers=2):
+    if attention_mode == 'prca':
+        return PyramidRefinedChannelAttention(
+            dim=dim,
+            num_heads=num_heads,
+            bias=bias,
+            num_scales=num_scales,
+            num_layers=num_layers,
+        )
+    if attention_mode == 'lite_psa':
+        return LitePSA(
+            dim=dim,
+            num_heads=num_heads,
+            bias=bias,
+            num_scales=num_scales,
+        )
+    if attention_mode == 'none':
+        return nn.Identity()
+    raise ValueError(f'Unsupported attention mode: {attention_mode}')
+
+
+def build_dynamic_conv(dynamic_conv_mode, channels):
+    if dynamic_conv_mode == 'dynamic':
+        return DynamicConvBlock(channels=channels)
+    if dynamic_conv_mode == 'shared':
+        return SharedDynamicConvBlock(channels=channels)
+    if dynamic_conv_mode == 'none':
+        return nn.Identity()
+    raise ValueError(f'Unsupported dynamic conv mode: {dynamic_conv_mode}')
+
+
+def build_cls_head(hidden_dim, num_classes, cls_hidden_dim, group_num):
+    if cls_hidden_dim and cls_hidden_dim > 0:
+        return nn.Sequential(
+            nn.Conv2d(in_channels=hidden_dim, out_channels=cls_hidden_dim, kernel_size=1, stride=1, padding=0),
+            nn.GroupNorm(group_num, cls_hidden_dim),
+            nn.SiLU(),
+            nn.Conv2d(in_channels=cls_hidden_dim, out_channels=num_classes, kernel_size=1, stride=1, padding=0)
+        )
+    return nn.Conv2d(in_channels=hidden_dim, out_channels=num_classes, kernel_size=1, stride=1, padding=0)
+
+
 class ImprovedSpeMamba(nn.Module):
-    def __init__(self, channels, token_num=4, use_residual=True, group_num=4, num_scales=3, num_layers=2):
+    def __init__(
+        self,
+        channels,
+        token_num=4,
+        use_residual=True,
+        group_num=4,
+        num_scales=3,
+        num_layers=2,
+        attention_mode='prca',
+        num_heads=4,
+    ):
         super(ImprovedSpeMamba, self).__init__()
         self.token_num = token_num
         self.use_residual = use_residual
-        # Set group_channel_num based on token_num and channels
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
-        # Initialize PyramidRefinedChannelAttention
-        self.pyramid_refined_attention = PyramidRefinedChannelAttention(
-            dim=self.channel_num,  # Apply attention on channel_num
-            num_heads=4,  # You can adjust num_heads as per your requirements
+        self.attention = build_attention_module(
+            attention_mode=attention_mode,
+            dim=self.channel_num,
+            num_heads=num_heads,
             bias=True,
             num_scales=num_scales,
-            num_layers=num_layers
+            num_layers=num_layers,
         )
-        # Initialize Mamba module for feature learning
         self.mamba = Mamba(
             d_model=self.group_channel_num,
             d_state=16,
             d_conv=4,
             expand=2,
         )
-        # Projection layer to project the concatenated feature maps to the output
         self.proj = nn.Sequential(
             nn.GroupNorm(group_num, self.channel_num),
             nn.SiLU()
         )
 
     def padding_feature(self, x):
-        B, C, H, W = x.shape
-        if C < self.channel_num:
-            pad_c = self.channel_num - C
-            pad_features = torch.zeros((B, pad_c, H, W)).to(x.device)
-            cat_features = torch.cat([x, pad_features], dim=1)
-            return cat_features
-        else:
-            return x
+        b, c, h, w = x.shape
+        if c < self.channel_num:
+            pad_c = self.channel_num - c
+            pad_features = torch.zeros((b, pad_c, h, w), device=x.device, dtype=x.dtype)
+            return torch.cat([x, pad_features], dim=1)
+        return x
 
     def forward(self, x):
-        # Apply padding to the input if necessary
         x_pad = self.padding_feature(x)
-        # Apply PyramidRefinedChannelAttention directly to the input tensor
-        x_re = self.pyramid_refined_attention(x_pad)
+        x_re = self.attention(x_pad)
 
-        # Flatten the input for Mamba
-        B, C, H, W = x_re.shape
-        x_re_flat = x_re.view(B * H * W, self.token_num, self.group_channel_num)  # Flatten for Mamba
-        # Apply Mamba for feature learning
+        b, c, h, w = x_re.shape
+        x_re_flat = x_re.view(b * h * w, self.token_num, self.group_channel_num)
         x_recon = self.mamba(x_re_flat)
 
-        # Reshape back to original dimensions
-        x_recon = x_recon.view(B, C, H, W)
-        # Apply the final projection to map the feature map to the output space
+        x_recon = x_recon.view(b, c, h, w)
         x_recon = self.proj(x_recon)
-        # If residual connection is enabled, add the input to the output
+        x_recon = x_recon[:, :x.shape[1]]
         return x_recon + x if self.use_residual else x_recon
 
 
 class ImprovedSpaMamba(nn.Module):
-    def __init__(self, channels, use_residual=True, group_num=4, token_num=4,  num_scales=3, num_layers=2):
+    def __init__(
+        self,
+        channels,
+        use_residual=True,
+        group_num=4,
+        token_num=4,
+        num_scales=3,
+        num_layers=2,
+        attention_mode='prca',
+        spatial_mode='baseline',
+        num_heads=4,
+    ):
         super(ImprovedSpaMamba, self).__init__()
         self.use_residual = use_residual
-        self.token_num = token_num
-        self.group_channel_num = math.ceil(channels / token_num)
-        self.channel_num = self.token_num * self.group_channel_num
-        # Initialize PyramidRefinedChannelAttention
-        self.pyramid_refined_attention = PyramidRefinedChannelAttention(
-            dim=self.channel_num,  # Apply attention on channel_num
-            num_heads=4,  # You can adjust num_heads as per your requirements
+        self.attention = build_attention_module(
+            attention_mode=attention_mode,
+            dim=channels,
+            num_heads=num_heads,
             bias=True,
             num_scales=num_scales,
-            num_layers=num_layers
+            num_layers=num_layers,
         )
 
         self.mamba = Mamba(
@@ -409,10 +610,16 @@ class ImprovedSpaMamba(nn.Module):
             expand=2,
         )
 
-        self.multi_scale_conv = MultiScaleConv(channels, channels)
-
-        # 添加 SCSA 模块
-        self.scsa = SCSA(dim=channels, head_num=4, window_size=7)
+        if spatial_mode == 'dwconv_mamba':
+            self.spatial_prior = nn.Sequential(
+                nn.Conv2d(channels, channels, kernel_size=3, padding=1, groups=channels, bias=False),
+                nn.GroupNorm(group_num, channels),
+                nn.SiLU()
+            )
+        elif spatial_mode == 'baseline':
+            self.spatial_prior = nn.Identity()
+        else:
+            raise ValueError(f'Unsupported spatial mode: {spatial_mode}')
 
         self.proj = nn.Sequential(
             nn.GroupNorm(group_num, channels),
@@ -420,106 +627,165 @@ class ImprovedSpaMamba(nn.Module):
         )
 
     def forward(self, x):
-        # 首先应用多尺度卷积
-        # x_re = self.multi_scale_conv(x)
-        x_re = self.pyramid_refined_attention(x)
-        # 然后应用 SCSA 模块进行空间-通道自注意力
-        # x_re = self.scsa(x)  # Apply SCSA (Spatial-Channel Self Attention)
+        x_re = self.attention(x)
+        x_re = self.spatial_prior(x_re)
 
-        # 将数据展平并通过 Mamba
-        B, C, H, W = x_re.shape
-        x_flat = x_re.view(B * H * W, 1, C)
+        b, c, h, w = x_re.shape
+        x_flat = x_re.view(b * h * w, 1, c)
         x_flat = self.mamba(x_flat)
 
-        # 重塑回原始形状
-        x_recon = x_flat.view(B, C, H, W)
-
-        # 应用最后的投影层
+        x_recon = x_flat.view(b, c, h, w)
         x_recon = self.proj(x_recon)
 
         return x_recon + x if self.use_residual else x_recon
 
 class ImprovedBothMamba(nn.Module):
-    def __init__(self, channels, token_num, use_residual, group_num=4):
+    def __init__(
+        self,
+        channels,
+        token_num,
+        use_residual,
+        group_num=4,
+        attention_mode='prca',
+        spatial_mode='baseline',
+        fusion_mode='attention',
+        num_scales=3,
+        num_layers=2,
+        num_heads=4,
+    ):
         super(ImprovedBothMamba, self).__init__()
         self.use_residual = use_residual
 
-        self.spa_mamba = ImprovedSpaMamba(channels, use_residual=use_residual, group_num=group_num)
-        self.spe_mamba = ImprovedSpeMamba(channels, token_num=token_num, use_residual=use_residual, group_num=group_num)
-
-        # 学习的注意力权重
-        self.attention = nn.Sequential(
-            nn.Conv2d(2 * channels, channels, kernel_size=1),
-            nn.SiLU(),
-            nn.Conv2d(channels, 1, kernel_size=1),
-            nn.Sigmoid()
+        self.spa_mamba = ImprovedSpaMamba(
+            channels,
+            use_residual=use_residual,
+            group_num=group_num,
+            token_num=token_num,
+            num_scales=num_scales,
+            num_layers=num_layers,
+            attention_mode=attention_mode,
+            spatial_mode=spatial_mode,
+            num_heads=num_heads,
         )
+        self.spe_mamba = ImprovedSpeMamba(
+            channels,
+            token_num=token_num,
+            use_residual=use_residual,
+            group_num=group_num,
+            num_scales=num_scales,
+            num_layers=num_layers,
+            attention_mode=attention_mode,
+            num_heads=num_heads,
+        )
+
+        if fusion_mode == 'attention':
+            self.fusion = AttentionFusion(channels)
+        elif fusion_mode == 'cross_gate':
+            self.fusion = CrossGateFusion(channels)
+        else:
+            raise ValueError(f'Unsupported fusion mode: {fusion_mode}')
 
     def forward(self, x):
         spa_x = self.spa_mamba(x)
         spe_x = self.spe_mamba(x)
-
-        # 拼接两个特征图来应用注意力
-        fused_input = torch.cat([spa_x, spe_x], dim=1)
-        attention_map = self.attention(fused_input)  # 生成注意力图
-
-        # 对每个特征图应用注意力
-        spa_x_attended = spa_x * attention_map
-        spe_x_attended = spe_x * (1 - attention_map)
-
-        # 融合经过注意力加权的特征
-        fusion_x = spa_x_attended + spe_x_attended
-
+        fusion_x = self.fusion(spa_x, spe_x)
         return fusion_x + x if self.use_residual else fusion_x
 
 class ImprovedMambaHSI(nn.Module):
-    def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True, mamba_type='both',
-                 token_num=4, group_num=4):
+    def __init__(
+        self,
+        in_channels=128,
+        hidden_dim=64,
+        num_classes=10,
+        use_residual=True,
+        mamba_type='both',
+        token_num=4,
+        group_num=4,
+        attention_mode='prca',
+        shared_attention_mode='none',
+        spatial_mode='baseline',
+        fusion_mode='attention',
+        dynamic_conv_mode='dynamic',
+        cls_hidden_dim=128,
+        num_scales=3,
+        num_layers=2,
+        num_heads=4,
+    ):
         super(ImprovedMambaHSI, self).__init__()
         self.mamba_type = mamba_type
 
-        # Patch Embedding Layer
         self.patch_embedding = nn.Sequential(
             nn.Conv2d(in_channels=in_channels, out_channels=hidden_dim, kernel_size=1, stride=1, padding=0),
             nn.GroupNorm(group_num, hidden_dim),
             nn.SiLU()
         )
+        self.shared_attention = build_attention_module(
+            attention_mode=shared_attention_mode,
+            dim=hidden_dim,
+            num_heads=num_heads,
+            bias=True,
+            num_scales=num_scales,
+            num_layers=num_layers,
+        )
 
-        # Choose between different Mamba modules
         if mamba_type == 'spa':
             self.mamba = nn.Sequential(
-                ImprovedSpaMamba(hidden_dim, use_residual=use_residual, group_num=group_num),
+                ImprovedSpaMamba(
+                    hidden_dim,
+                    use_residual=use_residual,
+                    group_num=group_num,
+                    token_num=token_num,
+                    num_scales=num_scales,
+                    num_layers=num_layers,
+                    attention_mode=attention_mode,
+                    spatial_mode=spatial_mode,
+                    num_heads=num_heads,
+                ),
                 nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
             )
         elif mamba_type == 'spe':
             self.mamba = nn.Sequential(
-                ImprovedSpeMamba(hidden_dim, token_num=token_num, use_residual=use_residual, group_num=group_num),
+                ImprovedSpeMamba(
+                    hidden_dim,
+                    token_num=token_num,
+                    use_residual=use_residual,
+                    group_num=group_num,
+                    num_scales=num_scales,
+                    num_layers=num_layers,
+                    attention_mode=attention_mode,
+                    num_heads=num_heads,
+                ),
                 nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
             )
         elif mamba_type == 'both':
             self.mamba = nn.Sequential(
-                ImprovedBothMamba(hidden_dim, token_num=token_num, use_residual=use_residual, group_num=group_num),
+                ImprovedBothMamba(
+                    hidden_dim,
+                    token_num=token_num,
+                    use_residual=use_residual,
+                    group_num=group_num,
+                    attention_mode=attention_mode,
+                    spatial_mode=spatial_mode,
+                    fusion_mode=fusion_mode,
+                    num_scales=num_scales,
+                    num_layers=num_layers,
+                    num_heads=num_heads,
+                ),
                 nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
             )
+        else:
+            raise ValueError(f'Unsupported mamba type: {mamba_type}')
 
-        # Replace transformer with DynamicConvBlock
-        self.dynamic_conv = DynamicConvBlock(channels=hidden_dim)
-
-        # Classification head
-        self.cls_head = nn.Sequential(
-            nn.Conv2d(in_channels=hidden_dim, out_channels=128, kernel_size=1, stride=1, padding=0),
-            nn.GroupNorm(group_num, 128),
-            nn.SiLU(),
-            nn.Conv2d(in_channels=128, out_channels=num_classes, kernel_size=1, stride=1, padding=0)
-        )
+        self.dynamic_conv = build_dynamic_conv(dynamic_conv_mode, hidden_dim)
+        self.cls_head = build_cls_head(hidden_dim, num_classes, cls_hidden_dim, group_num)
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
 
     def forward(self, x):
         x = self.patch_embedding(x)
-        x = self.mamba(x)    # 下采样到 H/2, W/2
+        x = self.shared_attention(x)
+        x = self.mamba(x)
         x = self.dynamic_conv(x)
-        logits = self.cls_head(x) # [B, num_classes, H/2, W/2]
-        # logits = self.upsample(logits) # [B, num_classes, H, W]
+        logits = self.cls_head(x)
         return logits
 
 
