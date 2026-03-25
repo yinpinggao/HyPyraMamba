@@ -84,6 +84,7 @@ def build_model_kwargs(args):
         'fusion_mode': args.fusion_mode if args.fusion_mode is not None else preset.get('fusion_mode', 'attention'),
         'dynamic_conv_mode': args.dynamic_conv_mode if args.dynamic_conv_mode is not None else preset.get('dynamic_conv_mode', 'dynamic'),
         'cls_hidden_dim': args.cls_hidden_dim if args.cls_hidden_dim is not None else preset.get('cls_hidden_dim', 128),
+        'post_mamba_se': args.post_mamba_se,
     }
     return model_kwargs
 
@@ -130,7 +131,8 @@ def format_model_descriptor(args, net_name, dataset_name, model_kwargs):
         f"mamba_type={model_kwargs['mamba_type']}, hidden_dim={model_kwargs['hidden_dim']}, "
         f"attention_mode={model_kwargs['attention_mode']}, shared_attention_mode={model_kwargs['shared_attention_mode']}, "
         f"spatial_mode={model_kwargs['spatial_mode']}, fusion_mode={model_kwargs['fusion_mode']}, "
-        f"dynamic_conv_mode={model_kwargs['dynamic_conv_mode']}, cls_hidden_dim={model_kwargs['cls_hidden_dim']}"
+        f"dynamic_conv_mode={model_kwargs['dynamic_conv_mode']}, cls_hidden_dim={model_kwargs['cls_hidden_dim']}, "
+        f"post_mamba_se={model_kwargs['post_mamba_se']}"
     )
 
 
@@ -198,6 +200,7 @@ def get_parser():
     parser.add_argument('--fusion_mode', type=str, default=None, choices=['attention', 'cross_gate'])
     parser.add_argument('--dynamic_conv_mode', type=str, default=None, choices=['dynamic', 'shared', 'none'])
     parser.add_argument('--cls_hidden_dim', type=int, default=None)
+    parser.add_argument('--post_mamba_se', type=str2bool, default=False)
     parser.add_argument('--token_num', type=int, default=4)
     parser.add_argument('--group_num', type=int, default=4)
 

@@ -449,6 +449,24 @@ class ChannelAttention(nn.Module):
         return x * self.sigmoid(y)
 
 
+class PostMambaSE(nn.Module):
+    def __init__(self, channels, reduction=4):
+        super(PostMambaSE, self).__init__()
+        hidden_channels = max(1, channels // reduction)
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.fc1 = nn.Conv2d(channels, hidden_channels, kernel_size=1, bias=False)
+        self.act = nn.SiLU()
+        self.fc2 = nn.Conv2d(hidden_channels, channels, kernel_size=1, bias=False)
+        self.gate = nn.Sigmoid()
+
+    def forward(self, x):
+        scale = self.pool(x)
+        scale = self.fc1(scale)
+        scale = self.act(scale)
+        scale = self.fc2(scale)
+        return x * self.gate(scale)
+
+
 class AttentionFusion(nn.Module):
     def __init__(self, channels):
         super(AttentionFusion, self).__init__()
@@ -532,6 +550,7 @@ class ImprovedSpeMamba(nn.Module):
         num_layers=2,
         attention_mode='prca',
         num_heads=4,
+        post_mamba_se=False,
     ):
         super(ImprovedSpeMamba, self).__init__()
         self.token_num = token_num
@@ -556,6 +575,7 @@ class ImprovedSpeMamba(nn.Module):
             nn.GroupNorm(group_num, self.channel_num),
             nn.SiLU()
         )
+        self.post_se = PostMambaSE(self.channel_num) if post_mamba_se else nn.Identity()
 
     def padding_feature(self, x):
         b, c, h, w = x.shape
@@ -574,6 +594,7 @@ class ImprovedSpeMamba(nn.Module):
         x_recon = self.mamba(x_re_flat)
 
         x_recon = x_recon.view(b, c, h, w)
+        x_recon = self.post_se(x_recon)
         x_recon = self.proj(x_recon)
         x_recon = x_recon[:, :x.shape[1]]
         return x_recon + x if self.use_residual else x_recon
@@ -591,6 +612,7 @@ class ImprovedSpaMamba(nn.Module):
         attention_mode='prca',
         spatial_mode='baseline',
         num_heads=4,
+        post_mamba_se=False,
     ):
         super(ImprovedSpaMamba, self).__init__()
         self.use_residual = use_residual
@@ -625,6 +647,7 @@ class ImprovedSpaMamba(nn.Module):
             nn.GroupNorm(group_num, channels),
             nn.SiLU()
         )
+        self.post_se = PostMambaSE(channels) if post_mamba_se else nn.Identity()
 
     def forward(self, x):
         x_re = self.attention(x)
@@ -635,6 +658,7 @@ class ImprovedSpaMamba(nn.Module):
         x_flat = self.mamba(x_flat)
 
         x_recon = x_flat.view(b, c, h, w)
+        x_recon = self.post_se(x_recon)
         x_recon = self.proj(x_recon)
 
         return x_recon + x if self.use_residual else x_recon
@@ -652,6 +676,7 @@ class ImprovedBothMamba(nn.Module):
         num_scales=3,
         num_layers=2,
         num_heads=4,
+        post_mamba_se=False,
     ):
         super(ImprovedBothMamba, self).__init__()
         self.use_residual = use_residual
@@ -666,6 +691,7 @@ class ImprovedBothMamba(nn.Module):
             attention_mode=attention_mode,
             spatial_mode=spatial_mode,
             num_heads=num_heads,
+            post_mamba_se=post_mamba_se,
         )
         self.spe_mamba = ImprovedSpeMamba(
             channels,
@@ -676,6 +702,7 @@ class ImprovedBothMamba(nn.Module):
             num_layers=num_layers,
             attention_mode=attention_mode,
             num_heads=num_heads,
+            post_mamba_se=post_mamba_se,
         )
 
         if fusion_mode == 'attention':
@@ -710,6 +737,7 @@ class ImprovedMambaHSI(nn.Module):
         num_scales=3,
         num_layers=2,
         num_heads=4,
+        post_mamba_se=False,
     ):
         super(ImprovedMambaHSI, self).__init__()
         self.mamba_type = mamba_type
@@ -740,6 +768,7 @@ class ImprovedMambaHSI(nn.Module):
                     attention_mode=attention_mode,
                     spatial_mode=spatial_mode,
                     num_heads=num_heads,
+                    post_mamba_se=post_mamba_se,
                 ),
                 nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
             )
@@ -754,6 +783,7 @@ class ImprovedMambaHSI(nn.Module):
                     num_layers=num_layers,
                     attention_mode=attention_mode,
                     num_heads=num_heads,
+                    post_mamba_se=post_mamba_se,
                 ),
                 nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
             )
@@ -770,6 +800,7 @@ class ImprovedMambaHSI(nn.Module):
                     num_scales=num_scales,
                     num_layers=num_layers,
                     num_heads=num_heads,
+                    post_mamba_se=post_mamba_se,
                 ),
                 nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
             )
