@@ -64,6 +64,8 @@ def get_parser():
     parser.add_argument('--val_samples', type=int, default=10)
     parser.add_argument('--exp_name', type=str, default='RUNS')
     parser.add_argument('--record_computecost', type=bool, default=False)
+    parser.add_argument('--label_smoothing', type=float, default=None)
+    parser.add_argument('--spatial_mode', type=str, default='auto', choices=['auto', 'baseline', 'dwconv_mamba'])
 
     args = parser.parse_args()
     return args
@@ -81,10 +83,29 @@ dataset_index = args.dataset_index # 选择的数据集索引（如 0、1、2 �
 max_epoch = args.max_epoch
 learning_rate = args.lr
 net_name = 'MambaHSI'
-paras_dict = {'net_name': net_name, 'dataset_index': dataset_index, 'num_list': num_list, 'lr': learning_rate, 'seed_list': seed_list}
 data_set_name_list = ['UP', 'HanChuan', 'HongHu', 'Houston','LongKou','Salinas','indian','Botswana','XuZhou','Pavia']
 data_set_name = data_set_name_list[dataset_index]
 split_image = data_set_name in ['HanChuan', 'Houston','Pavia']
+
+if args.label_smoothing is None:
+    label_smoothing = 0.1 if data_set_name == 'indian' else 0.0
+else:
+    label_smoothing = args.label_smoothing
+
+if args.spatial_mode == 'auto':
+    spatial_mode = 'dwconv_mamba' if data_set_name in ['LongKou', 'XuZhou'] else 'baseline'
+else:
+    spatial_mode = args.spatial_mode
+
+paras_dict = {
+    'net_name': net_name,
+    'dataset_index': dataset_index,
+    'num_list': num_list,
+    'lr': learning_rate,
+    'seed_list': seed_list,
+    'label_smoothing': label_smoothing,
+    'spatial_mode': spatial_mode,
+}
 
 transform = transforms.Compose([
     transforms.ToTensor(),
@@ -131,7 +152,7 @@ if __name__ == '__main__':
 
     flag_list = [1, 0]  # ratio or num
     ratio_list = [0.1, 0.01]  # [train_ratio, val_ratio]
-    loss_func = torch.nn.CrossEntropyLoss(ignore_index=-1)
+    loss_func = torch.nn.CrossEntropyLoss(ignore_index=-1, label_smoothing=label_smoothing)
 
     OA_ALL = []
     AA_ALL = []
@@ -165,7 +186,12 @@ if __name__ == '__main__':
         train_label, val_label, test_label = data_load_operate.generate_image_iter(data_pca, height, width, gt_reshape, index)
 
         # build Model  单GPU
-        net = MambaHSI(in_channels=channels, num_classes=class_count, hidden_dim=128)
+        net = MambaHSI(
+            in_channels=channels,
+            num_classes=class_count,
+            hidden_dim=128,
+            spatial_mode=spatial_mode
+        )
 
         logger.info(paras_dict)
         logger.info(net)
@@ -311,7 +337,12 @@ if __name__ == '__main__':
 
         load_weight_path = save_weight_path
         net.update_params = None
-        best_net = MambaHSI(in_channels=channels, num_classes=class_count, hidden_dim=128)
+        best_net = MambaHSI(
+            in_channels=channels,
+            num_classes=class_count,
+            hidden_dim=128,
+            spatial_mode=spatial_mode
+        )
         best_net.to(device)
         best_net.load_state_dict(torch.load(load_weight_path))
         best_net.eval()

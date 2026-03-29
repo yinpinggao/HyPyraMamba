@@ -387,12 +387,14 @@ class ImprovedSpeMamba(nn.Module):
 
 
 class ImprovedSpaMamba(nn.Module):
-    def __init__(self, channels, use_residual=True, group_num=4, token_num=4,  num_scales=3, num_layers=2):
+    def __init__(self, channels, use_residual=True, group_num=4, token_num=4,  num_scales=3, num_layers=2,
+                 spatial_mode='baseline'):
         super(ImprovedSpaMamba, self).__init__()
         self.use_residual = use_residual
         self.token_num = token_num
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
+        self.spatial_mode = spatial_mode
         # Initialize PyramidRefinedChannelAttention
         self.pyramid_refined_attention = PyramidRefinedChannelAttention(
             dim=self.channel_num,  # Apply attention on channel_num
@@ -414,12 +416,22 @@ class ImprovedSpaMamba(nn.Module):
         # 添加 SCSA 模块
         self.scsa = SCSA(dim=channels, head_num=4, window_size=7)
 
+        if spatial_mode == 'dwconv_mamba':
+            self.spatial_prior = nn.Sequential(
+                nn.Conv2d(channels, channels, kernel_size=3, padding=1, groups=channels),
+                nn.GroupNorm(group_num, channels),
+                nn.SiLU()
+            )
+        else:
+            self.spatial_prior = nn.Identity()
+
         self.proj = nn.Sequential(
             nn.GroupNorm(group_num, channels),
             nn.SiLU()
         )
 
     def forward(self, x):
+        x = self.spatial_prior(x)
         # 首先应用多尺度卷积
         # x_re = self.multi_scale_conv(x)
         x_re = self.pyramid_refined_attention(x)
@@ -440,11 +452,16 @@ class ImprovedSpaMamba(nn.Module):
         return x_recon + x if self.use_residual else x_recon
 
 class ImprovedBothMamba(nn.Module):
-    def __init__(self, channels, token_num, use_residual, group_num=4):
+    def __init__(self, channels, token_num, use_residual, group_num=4, spatial_mode='baseline'):
         super(ImprovedBothMamba, self).__init__()
         self.use_residual = use_residual
 
-        self.spa_mamba = ImprovedSpaMamba(channels, use_residual=use_residual, group_num=group_num)
+        self.spa_mamba = ImprovedSpaMamba(
+            channels,
+            use_residual=use_residual,
+            group_num=group_num,
+            spatial_mode=spatial_mode
+        )
         self.spe_mamba = ImprovedSpeMamba(channels, token_num=token_num, use_residual=use_residual, group_num=group_num)
 
         # 学习的注意力权重
@@ -474,7 +491,7 @@ class ImprovedBothMamba(nn.Module):
 
 class ImprovedMambaHSI(nn.Module):
     def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True, mamba_type='both',
-                 token_num=4, group_num=4):
+                 token_num=4, group_num=4, spatial_mode='baseline'):
         super(ImprovedMambaHSI, self).__init__()
         self.mamba_type = mamba_type
 
@@ -488,7 +505,12 @@ class ImprovedMambaHSI(nn.Module):
         # Choose between different Mamba modules
         if mamba_type == 'spa':
             self.mamba = nn.Sequential(
-                ImprovedSpaMamba(hidden_dim, use_residual=use_residual, group_num=group_num),
+                ImprovedSpaMamba(
+                    hidden_dim,
+                    use_residual=use_residual,
+                    group_num=group_num,
+                    spatial_mode=spatial_mode
+                ),
                 nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
             )
         elif mamba_type == 'spe':
@@ -498,7 +520,13 @@ class ImprovedMambaHSI(nn.Module):
             )
         elif mamba_type == 'both':
             self.mamba = nn.Sequential(
-                ImprovedBothMamba(hidden_dim, token_num=token_num, use_residual=use_residual, group_num=group_num),
+                ImprovedBothMamba(
+                    hidden_dim,
+                    token_num=token_num,
+                    use_residual=use_residual,
+                    group_num=group_num,
+                    spatial_mode=spatial_mode
+                ),
                 nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
             )
 
