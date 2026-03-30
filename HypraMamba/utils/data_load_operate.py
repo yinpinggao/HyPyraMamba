@@ -88,11 +88,24 @@ def sampling(ratio_list, num_list, gt_reshape, class_count, Flag):
             val_index_flag = max(int(ratio_list[1] * len(cls_index)), 1)
         # Split by num per class
         elif Flag == 1:  # Fixed quantity per category
-            if len(cls_index) > num_list[0]:
+            total_count = len(cls_index)
+            if total_count >= num_list[0]:
                 train_index_flag = num_list[0]
+                remaining_count = total_count - train_index_flag
+                val_index_flag = min(num_list[1], max(remaining_count - 1, 0))
             else:
-                train_index_flag = 15
-            val_index_flag = num_list[1]
+                train_index_flag = max(int(round(total_count * 0.6)), 1)
+                val_index_flag = max(int(round(total_count * 0.2)), 1) if total_count >= 3 else 0
+
+                if train_index_flag + val_index_flag >= total_count and total_count >= 3:
+                    overflow = train_index_flag + val_index_flag - (total_count - 1)
+                    if overflow > 0 and train_index_flag > 1:
+                        reduce_train = min(overflow, train_index_flag - 1)
+                        train_index_flag -= reduce_train
+                        overflow -= reduce_train
+                    if overflow > 0 and val_index_flag > 1:
+                        reduce_val = min(overflow, val_index_flag - 1)
+                        val_index_flag -= reduce_val
 
         train_label_index_dict[cls] = list(cls_index[:train_index_flag])
         test_label_index_dict[cls] = list(cls_index[train_index_flag:][val_index_flag:])

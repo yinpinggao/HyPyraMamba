@@ -2,11 +2,13 @@ import sys
 import os
 # sys.path.append('/content/drive/MyDrive/hyperspectral classification/MambaHSI')
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-os.environ['CUDA_VISIBLE_DEVICES']='0' #选择服务器
+if 'CUDA_VISIBLE_DEVICES' not in os.environ:
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # 未指定时默认使用 GPU 0
 import time
 import torch
 import random
 import argparse
+import math
 import numpy as np
 from torchvision import models, transforms
 # import matplotlib.pyplot as plt
@@ -29,7 +31,7 @@ import torch
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:64,garbage_collection_threshold:0.6'
 torch.autograd.set_detect_anomaly(True)
 
-scaler = GradScaler()
+scaler = GradScaler(enabled=torch.cuda.is_available())
 
 accumulation_steps = 4
 
@@ -40,6 +42,54 @@ time_current = time.strftime("%y-%m-%d-%H.%M", time.localtime())
 def vis_a_image(gt_vis, pred_vis, save_single_predict_path, save_single_gt_path, only_vis_label=False):
     visualize_predict(gt_vis, pred_vis, save_single_predict_path, save_single_gt_path, only_vis_label=only_vis_label)
     visualize_predict(gt_vis, pred_vis, save_single_predict_path.replace('.png', '_mask.png'), save_single_gt_path, only_vis_label=True)
+
+
+def count_parameters(model):
+    return sum(param.numel() for param in model.parameters())
+
+
+def build_training_chunks(x, y, num_chunks, overlap=5):
+    if num_chunks <= 1:
+        return [(x, y)]
+
+    height = x.shape[2]
+    chunk_size = max(math.ceil(height / num_chunks), 1)
+    chunks = []
+
+    for chunk_idx in range(num_chunks):
+        start = chunk_idx * chunk_size
+        end = min((chunk_idx + 1) * chunk_size, height)
+        if start >= height:
+            break
+
+        start = max(start - overlap, 0)
+        end = min(end + overlap, height)
+        chunks.append((x[:, :, start:end, :], y[:, start:end, :]))
+
+    return chunks if chunks else [(x, y)]
+
+
+def train_one_epoch(net, optimizer, loss_func, x, y_train, num_chunks):
+    train_chunks = build_training_chunks(x, y_train, num_chunks=num_chunks)
+    effective_chunk_count = len(train_chunks)
+    optimizer.zero_grad(set_to_none=True)
+    epoch_loss = 0.0
+
+    for step_idx, (x_chunk, y_chunk) in enumerate(train_chunks):
+        with autocast(enabled=torch.cuda.is_available()):
+            y_pred = net(x_chunk)
+            loss = head_loss(loss_func, y_pred, y_chunk.long())
+            scaled_loss = loss / effective_chunk_count
+
+        scaler.scale(scaled_loss).backward()
+        epoch_loss += loss.detach().cpu().item()
+
+        if (step_idx + 1) % accumulation_steps == 0 or (step_idx + 1) == len(train_chunks):
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad(set_to_none=True)
+
+    return epoch_loss / effective_chunk_count
 
 # random seed setting 设置随机种子
 def setup_seed(seed):
@@ -95,7 +145,7 @@ if __name__ == '__main__':
     work_dir = args.work_dir          #./
     # tr30val10_lr0.0003
     setting_name = 'tr{}val{}'.format(str(args.train_samples), str(args.val_samples)) + '_lr{}'.format(str(learning_rate))
-    dataset_name = data_set_name # UP 。。。
+    dataset_name = data_set_name # UP
     exp_name = args.exp_name
 
     save_folder = os.path.join(work_dir, exp_name, net_name, dataset_name) # './RUNS/MambaHSI/UP'
@@ -139,6 +189,7 @@ if __name__ == '__main__':
     EACH_ACC_ALL = []
     Train_Time_ALL = []
     Test_Time_ALL = []
+    param_count = None
     CLASS_ACC = np.zeros([len(seed_list), class_count])
     evaluator = Evaluator(num_class=class_count)
 
@@ -186,8 +237,10 @@ if __name__ == '__main__':
         val_acc_list = [0]
 
         optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate, weight_decay=1e-5)
+        param_count = count_parameters(net)
 
         logger.info(optimizer)
+        logger.info('Total parameters: {:,}'.format(param_count))
         best_loss = 99999
         if record_computecost:
             net.eval()
@@ -207,67 +260,20 @@ if __name__ == '__main__':
             loss_dict = {}
 
             net.train()
+            train_chunk_count = accumulation_steps
 
-            if split_image:
-                x_part1 = x[:, :, :x.shape[2] // 2 + 5, :]
-                y_part1 = y_train[:, :x.shape[2] // 2 + 5, :]
-                x_part2 = x[:, :, x.shape[2] // 2 - 5:, :]
-                y_part2 = y_train[:, x.shape[2] // 2 - 5:, :]
-
-                # 第一部分前向传播
-                y_pred_part1 = net(x_part1)
-                ls1 = head_loss(loss_func, y_pred_part1, y_part1.long())
-                optimizer.zero_grad()
-                ls1.backward()
-                optimizer.step()
+            try:
+                # Split large images into micro-batches so we can accumulate gradients.
+                epoch_loss = train_one_epoch(net, optimizer, loss_func, x, y_train, num_chunks=train_chunk_count)
+            except RuntimeError as err:
+                if 'out of memory' not in str(err).lower():
+                    raise
+                optimizer.zero_grad(set_to_none=True)
                 torch.cuda.empty_cache()
+                split_image = True
+                epoch_loss = train_one_epoch(net, optimizer, loss_func, x, y_train, num_chunks=accumulation_steps * 2)
 
-                # 第二部分前向传播
-                y_pred_part2 = net(x_part2)
-                ls2 = head_loss(loss_func, y_pred_part2, y_part2.long())
-                optimizer.zero_grad()
-                ls2.backward()
-                optimizer.step()
-                torch.cuda.empty_cache()
-
-                logger.info('Iter:{}|loss:{}'.format(epoch, (ls1 + ls2).detach().cpu().numpy()))
-
-
-            else:
-                try:
-                    # autocast()：这个上下文管理器启用混合精度训练，它可以减少计算时间并减少显存占用。scaler 用于处理梯度缩放，使得反向传播时能更稳定。
-                    with autocast():
-                         y_pred = net(x)
-                         ls = head_loss(loss_func, y_pred, y_train.long())
-                    optimizer.zero_grad()
-                    scaler.scale(ls).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
-                    torch.cuda.empty_cache()
-
-                # except 处理：如果内存不足或计算出现问题（比如 OOM 错误），会切换为 split_image = True，重新将图像切分为两部分并训练。这是一个容错机制，防止内存不足导致训练崩溃。
-                except:
-                    optimizer.zero_grad()
-                    torch.cuda.empty_cache()
-                    split_image = True
-                    x_part1 = x[:, :, :x.shape[2] // 2 + 5, :]
-                    y_part1 = y_train[:, :x.shape[2] // 2 + 5, :]
-                    x_part2 = x[:, :, x.shape[2] // 2 - 5:, :]
-                    y_part2 = y_train[:, x.shape[2] // 2 - 5:, :]
-
-                    y_pred_part1 = net(x_part1)
-                    ls1 = head_loss(loss_func, y_pred_part1, y_part1.long())
-                    optimizer.zero_grad()
-                    ls1.backward()
-                    optimizer.step()
-
-                    y_pred_part2 = net(x_part2)
-                    ls2 = head_loss(loss_func, y_pred_part2, y_part2.long())
-                    optimizer.zero_grad()
-                    ls2.backward()
-                    optimizer.step()
-
-                    logger.info('Iter:{}|loss:{}'.format(epoch, (ls1 + ls2).detach().cpu().numpy()))
+            logger.info('Iter:{}|loss:{}'.format(epoch, epoch_loss))
 
             torch.cuda.empty_cache()
 
@@ -313,7 +319,7 @@ if __name__ == '__main__':
         net.update_params = None
         best_net = MambaHSI(in_channels=channels, num_classes=class_count, hidden_dim=128)
         best_net.to(device)
-        best_net.load_state_dict(torch.load(load_weight_path))
+        best_net.load_state_dict(torch.load(load_weight_path, map_location=device))
         best_net.eval()
 
         test_evaluator = Evaluator(num_class=class_count)
@@ -331,7 +337,7 @@ if __name__ == '__main__':
             OA_test = test_evaluator.Pixel_Accuracy()
             mIOU_test, IOU_test = test_evaluator.Mean_Intersection_over_Union()
             mAcc_test, Acc_test = test_evaluator.Pixel_Accuracy_Class()
-            Kappa_test = evaluator.Kappa()
+            Kappa_test = test_evaluator.Kappa()
             logger.info('Test {}|OA:{}|MACC:{}|Kappa:{}|MIOU:{}|IOU:{}|ACC:{}'.format(epoch, OA_test, mAcc_test, Kappa_test, mIOU_test, IOU_test, Acc_test))
             vis_a_image(gt, predict_test, predict_save_path, gt_save_path)
         toc2 = time.perf_counter()  # 记录结束时间
@@ -344,6 +350,7 @@ if __name__ == '__main__':
                       + " seed=" + str(curr_seed) \
                       + " learning rate=" + str(learning_rate) \
                       + " epochs=" + str(max_epoch) \
+                      + " total params=" + str(param_count) \
                       + " train ratio=" + str(ratio_list[0]) \
                       + " val ratio=" + str(ratio_list[1]) \
                       + " ======================" \
@@ -382,6 +389,7 @@ if __name__ == '__main__':
     logger.info('OA: {:.2f} ± {:.2f}'.format(np.mean(OA_ALL) * 100, np.std(OA_ALL) * 100))
     logger.info('AA: {:.2f} ± {:.2f}'.format(np.mean(AA_ALL) * 100, np.std(AA_ALL) * 100))
     logger.info('Kpp: {:.2f} ± {:.2f}'.format(np.mean(KPP_ALL) * 100, np.std(KPP_ALL) * 100))
+    logger.info('Total parameters: {:,}'.format(param_count))
     logger.info('Acc per class: {} ± {}'.format(
         np.round(np.mean(EACH_ACC_ALL, 0) * 100, decimals=2).tolist(),
         np.round(np.std(EACH_ACC_ALL, 0) * 100, decimals=2).tolist()
@@ -413,6 +421,7 @@ if __name__ == '__main__':
                       + '\nList of OA:' + str(list(OA_ALL)) \
                       + '\nList of AA:' + str(list(AA_ALL)) \
                       + '\nList of KPP:' + str(list(KPP_ALL)) \
+                      + '\nTotal parameters=' + str(param_count) \
                       + '\nOA=' + str(round(np.mean(OA_ALL) * 100, 2)) + '+-' + str(round(np.std(OA_ALL) * 100, 2)) \
                       + '\nAA=' + str(round(np.mean(AA_ALL) * 100, 2)) + '+-' + str(round(np.std(AA_ALL) * 100, 2)) \
                       + '\nKpp=' + str(round(np.mean(KPP_ALL) * 100, 2)) + '+-' + str(round(np.std(KPP_ALL) * 100, 2)) \
@@ -421,7 +430,7 @@ if __name__ == '__main__':
                       + "\nAverage training time=" + str(np.round(np.mean(Train_Time_ALL), decimals=2)) + '+-' + str(
             np.round(np.std(Train_Time_ALL), decimals=3)) \
                       + "\nAverage testing time=" + str(np.round(np.mean(Test_Time_ALL) * 1000, decimals=2)) + '+-' + str(
-            np.round(np.std(Test_Time_ALL) * 100, decimals=3))
+            np.round(np.std(Test_Time_ALL) * 1000, decimals=3))
         f.write(str_results)
 
     del net
