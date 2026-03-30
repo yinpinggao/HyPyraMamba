@@ -375,6 +375,10 @@ class ImprovedSpeMamba(nn.Module):
         # Flatten the input for Mamba
         B, C, H, W = x_re.shape
         x_re_flat = x_re.view(B * H * W, self.token_num, self.group_channel_num)  # Flatten for Mamba
+        # Add first-order spectral differences before Mamba without changing dimensions.
+        x_diff = torch.diff(x_re_flat, n=1, dim=1)
+        x_diff = F.pad(x_diff, (0, 0, 0, 1))
+        x_re_flat = x_re_flat + x_diff
         # Apply Mamba for feature learning
         x_recon = self.mamba(x_re_flat)
 
@@ -440,11 +444,11 @@ class ImprovedSpaMamba(nn.Module):
 
         # 将数据展平并通过 Mamba
         B, C, H, W = x_re.shape
-        x_flat = x_re.view(B * H * W, 1, C)
+        x_flat = x_re.permute(0, 2, 3, 1).reshape(B, H * W, C)
         x_flat = self.mamba(x_flat)
 
         # 重塑回原始形状
-        x_recon = x_flat.view(B, C, H, W)
+        x_recon = x_flat.reshape(B, H, W, C).permute(0, 3, 1, 2)
 
         # 应用最后的投影层
         x_recon = self.proj(x_recon)

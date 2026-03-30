@@ -51,6 +51,19 @@ def setup_seed(seed):
     torch.backends.cudnn.deterministic = True  # 确保每次计算的结果是确定性的
     torch.backends.cudnn.benchmark = False  # 禁用 cuDNN 自动优化，确保每次运行的一致性
 
+
+def compute_balanced_class_weights(train_label, class_count, target_device):
+    valid_labels = train_label[train_label >= 0].long().view(-1)
+    class_counts = torch.bincount(valid_labels, minlength=class_count).float()
+    class_weights = torch.zeros(class_count, dtype=torch.float32)
+    nonzero_mask = class_counts > 0
+
+    if nonzero_mask.any():
+        total_valid = class_counts[nonzero_mask].sum()
+        class_weights[nonzero_mask] = total_valid / (nonzero_mask.sum() * class_counts[nonzero_mask])
+
+    return class_weights.to(target_device), class_counts.long().tolist()
+
 def get_parser():
 
     parser = argparse.ArgumentParser()
@@ -66,6 +79,7 @@ def get_parser():
     parser.add_argument('--record_computecost', type=bool, default=False)
     parser.add_argument('--label_smoothing', type=float, default=None)
     parser.add_argument('--spatial_mode', type=str, default='auto', choices=['auto', 'baseline', 'dwconv_mamba'])
+    parser.add_argument('--class_weight_mode', type=str, default='auto', choices=['auto', 'none', 'balanced'])
 
     args = parser.parse_args()
     return args
@@ -75,8 +89,8 @@ args \
     = get_parser()
 record_computecost = args.record_computecost
 exp_name = args.exp_name
-seed_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-#seed_list = [0, 1, 2]
+#seed_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+seed_list = [0, 1, 2]
 num_list = [args.train_samples, args.val_samples] # 用于存储训练样本数和验证样本数
 
 dataset_index = args.dataset_index # 选择的数据集索引（如 0、1、2 等），通过索引选择不同的数据集。
@@ -97,6 +111,11 @@ if args.spatial_mode == 'auto':
 else:
     spatial_mode = args.spatial_mode
 
+if args.class_weight_mode == 'auto':
+    class_weight_mode = 'balanced' if data_set_name == 'indian' else 'none'
+else:
+    class_weight_mode = args.class_weight_mode
+
 paras_dict = {
     'net_name': net_name,
     'dataset_index': dataset_index,
@@ -105,6 +124,7 @@ paras_dict = {
     'seed_list': seed_list,
     'label_smoothing': label_smoothing,
     'spatial_mode': spatial_mode,
+    'class_weight_mode': class_weight_mode,
 }
 
 transform = transforms.Compose([
@@ -152,7 +172,6 @@ if __name__ == '__main__':
 
     flag_list = [1, 0]  # ratio or num
     ratio_list = [0.1, 0.01]  # [train_ratio, val_ratio]
-    loss_func = torch.nn.CrossEntropyLoss(ignore_index=-1, label_smoothing=label_smoothing)
 
     OA_ALL = []
     AA_ALL = []
@@ -199,6 +218,18 @@ if __name__ == '__main__':
         x = transform(np.array(img))
         x = x.unsqueeze(0).float().to(device)
         print(f"x shape: {x.shape}")
+
+        if class_weight_mode == 'balanced':
+            class_weights, class_counts = compute_balanced_class_weights(train_label, class_count, device)
+            loss_func = torch.nn.CrossEntropyLoss(
+                ignore_index=-1,
+                weight=class_weights,
+                label_smoothing=label_smoothing
+            )
+            logger.info('train_class_counts: {}'.format(class_counts))
+            logger.info('class_weights: {}'.format([round(v, 4) for v in class_weights.detach().cpu().tolist()]))
+        else:
+            loss_func = torch.nn.CrossEntropyLoss(ignore_index=-1, label_smoothing=label_smoothing)
 
         train_label = train_label.to(device)
         test_label = test_label.to(device)

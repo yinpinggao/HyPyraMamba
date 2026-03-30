@@ -88,11 +88,20 @@ def sampling(ratio_list, num_list, gt_reshape, class_count, Flag):
             val_index_flag = max(int(ratio_list[1] * len(cls_index)), 1)
         # Split by num per class
         elif Flag == 1:  # Fixed quantity per category
-            if len(cls_index) > num_list[0]:
+            cls_count = len(cls_index)
+            if cls_count >= num_list[0]:
                 train_index_flag = num_list[0]
+                remaining_after_train = cls_count - train_index_flag
+                val_index_flag = min(num_list[1], remaining_after_train)
             else:
-                train_index_flag = 15
-            val_index_flag = num_list[1]
+                # For rare classes, back off to a 60/20/20 split instead of
+                # forcing fixed counts that may exhaust the class.
+                train_index_flag = max(int(round(cls_count * 0.6)), 1)
+                val_index_flag = max(int(round(cls_count * 0.2)), 0)
+
+                # Keep the split valid after rounding and leave the rest for test.
+                if train_index_flag + val_index_flag > cls_count:
+                    val_index_flag = max(cls_count - train_index_flag, 0)
 
         train_label_index_dict[cls] = list(cls_index[:train_index_flag])
         test_label_index_dict[cls] = list(cls_index[train_index_flag:][val_index_flag:])
