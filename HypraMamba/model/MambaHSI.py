@@ -605,3 +605,68 @@ class SpeOnlyMambaHSI(nn.Module):
         return logits
 
 
+class LightSpatialRefine(nn.Module):
+    def __init__(self, channels, group_num=4):
+        super(LightSpatialRefine, self).__init__()
+        self.block = nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1, groups=channels),
+            nn.GroupNorm(group_num, channels),
+            nn.SiLU(),
+            nn.Conv2d(channels, channels, kernel_size=1),
+        )
+
+    def forward(self, x):
+        return self.block(x) + x
+
+
+class SpeOnlyLightSpatialMambaHSI(nn.Module):
+    def __init__(self, in_channels=128, hidden_dim=128, num_classes=10,
+                 use_residual=True, token_num=4, group_num=4):
+        super(SpeOnlyLightSpatialMambaHSI, self).__init__()
+
+        self.patch_embedding = nn.Sequential(
+            nn.Conv2d(in_channels=in_channels, out_channels=hidden_dim, kernel_size=1, stride=1, padding=0),
+            nn.GroupNorm(group_num, hidden_dim),
+            nn.SiLU()
+        )
+
+        self.shared_prca = PyramidRefinedChannelAttention(
+            dim=hidden_dim,
+            num_heads=4,
+            bias=True,
+            num_scales=3,
+            num_layers=2
+        )
+
+        self.spe_mamba = ImprovedSpeMamba(
+            hidden_dim,
+            token_num=token_num,
+            use_residual=use_residual,
+            group_num=group_num,
+            use_internal_prca=False
+        )
+
+        self.spatial_refine = LightSpatialRefine(hidden_dim, group_num=group_num)
+
+        self.downsample = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
+
+        self.dynamic_conv = DynamicConvBlock(channels=hidden_dim)
+
+        self.cls_head = nn.Sequential(
+            nn.Conv2d(in_channels=hidden_dim, out_channels=128, kernel_size=1, stride=1, padding=0),
+            nn.GroupNorm(group_num, 128),
+            nn.SiLU(),
+            nn.Conv2d(in_channels=128, out_channels=num_classes, kernel_size=1, stride=1, padding=0)
+        )
+
+    def forward(self, x):
+        x = self.patch_embedding(x)
+        x = self.shared_prca(x)
+        x = self.spe_mamba(x)
+        x = self.spatial_refine(x)
+        x = self.downsample(x)
+        x = self.dynamic_conv(x)
+        logits = self.cls_head(x)
+        return logits
+
+

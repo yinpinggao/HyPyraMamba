@@ -18,7 +18,7 @@ from utils.HSICommonUtils import normlize3D, ImageStretching
 from utils.setup_logger import setup_logger
 from utils.visual_predict import visualize_predict
 from PIL import Image
-from model.MambaHSI import SpeOnlyMambaHSI
+from model.MambaHSI import SpeOnlyLightSpatialMambaHSI
 from calflops import calculate_flops
 from sklearn.decomposition import PCA
 from scipy.ndimage import gaussian_filter
@@ -205,7 +205,7 @@ if __name__ == '__main__':
         train_label, val_label, test_label = data_load_operate.generate_image_iter(data_pca, height, width, gt_reshape, index)
 
         # build Model  单GPU
-        net = SpeOnlyMambaHSI(
+        net = SpeOnlyLightSpatialMambaHSI(
             in_channels=channels,
             num_classes=class_count,
             hidden_dim=128
@@ -367,7 +367,7 @@ if __name__ == '__main__':
 
         load_weight_path = save_weight_path
         net.update_params = None
-        best_net = SpeOnlyMambaHSI(
+        best_net = SpeOnlyLightSpatialMambaHSI(
             in_channels=channels,
             num_classes=class_count,
             hidden_dim=128
