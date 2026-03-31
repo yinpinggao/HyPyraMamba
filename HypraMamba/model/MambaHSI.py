@@ -534,8 +534,8 @@ class ImprovedMambaHSI(nn.Module):
                 nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
             )
 
-        # Replace transformer with DynamicConvBlock
-        self.dynamic_conv = DynamicConvBlock(channels=hidden_dim)
+        # Ablation: remove DynamicConvBlock while keeping the rest unchanged.
+        self.dynamic_conv = nn.Identity()
 
         # Classification head
         self.cls_head = nn.Sequential(
