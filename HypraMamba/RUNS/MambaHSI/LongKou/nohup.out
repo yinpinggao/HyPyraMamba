@@ -1151,3 +1151,1077 @@ seg_logits: torch.Size([1, 9, 550, 400])[I 260331 14:54:32 train:346] Evaluate 1
      1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  0.9 1.  1.  1.  1.  0.9]
 [I 260331 15:03:31 train:346] Evaluate 116|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.9        0.90909091 1.
      1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  0.9 1.  1.  1.  1.  0.9]
+[I 260331 15:03:35 train:346] Evaluate 117|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.9        0.90909091 1.
+     1.         1.         1.        ]|ACC:[1.  1.  1.  0.9 1.  1.  1.  1.  1. ]
+[I 260331 15:03:40 train:346] Evaluate 118|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:03:45 train:346] Evaluate 119|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:03:49 train:346] Evaluate 120|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.9        0.90909091 1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  0.9 1.  1.  1.  1.  0.9]
+[I 260331 15:03:53 train:346] Evaluate 121|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.9        0.90909091 1.
+     1.         1.         1.        ]|ACC:[1.  1.  1.  0.9 1.  1.  1.  1.  1. ]
+[I 260331 15:03:58 train:346] Evaluate 122|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.9        0.90909091 1.
+     1.         1.         1.        ]|ACC:[1.  1.  1.  0.9 1.  1.  1.  1.  1. ]
+[I 260331 15:04:02 train:346] Evaluate 123|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:04:07 train:346] Evaluate 124|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:04:12 train:346] Evaluate 125|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.9        0.90909091 1.
+     1.         1.         1.        ]|ACC:[1.  1.  1.  0.9 1.  1.  1.  1.  1. ]
+[I 260331 15:04:16 train:346] Evaluate 126|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.9        0.90909091 1.
+     1.         1.         1.        ]|ACC:[1.  1.  1.  0.9 1.  1.  1.  1.  1. ]
+[I 260331 15:04:21 train:346] Evaluate 127|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.9        0.90909091 1.
+     1.         1.         1.        ]|ACC:[1.  1.  1.  0.9 1.  1.  1.  1.  1. ]
+[I 260331 15:04:25 train:346] Evaluate 128|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:04:30 train:346] Evaluate 129|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:04:34 train:346] Evaluate 130|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:04:39 train:346] Evaluate 131|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.9        0.90909091 1.
+     1.         1.         1.        ]|ACC:[1.  1.  1.  0.9 1.  1.  1.  1.  1. ]
+[I 260331 15:04:43 train:346] Evaluate 132|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:04:48 train:346] Evaluate 133|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:04:52 train:346] Evaluate 134|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:04:57 train:346] Evaluate 135|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:05:01 train:346] Evaluate 136|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:05:06 train:346] Evaluate 137|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:05:10 train:346] Evaluate 138|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:05:15 train:346] Evaluate 139|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:05:19 train:346] Evaluate 140|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:05:24 train:346] Evaluate 141|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:05:28 train:346] Evaluate 142|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:05:33 train:346] Evaluate 143|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:05:37 train:346] Evaluate 144|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.90909091 0.9        1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 1.  1.  1.  0.9]
+[I 260331 15:05:42 train:346] Evaluate 145|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:05:46 train:346] Evaluate 146|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:05:51 train:346] Evaluate 147|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:05:55 train:346] Evaluate 148|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:06:00 train:346] Evaluate 149|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.90909091 0.9        1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 1.  1.  1.  0.9]
+[I 260331 15:06:04 train:346] Evaluate 150|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.90909091 0.9        1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 1.  1.  1.  0.9]
+[I 260331 15:06:09 train:346] Evaluate 151|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:06:13 train:346] Evaluate 152|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  1.  0.9]
+[I 260331 15:06:18 train:346] Evaluate 153|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.90909091 0.9        1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 1.  1.  1.  0.9]
+[I 260331 15:06:22 train:346] Evaluate 154|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.90909091 0.9        1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 1.  1.  1.  0.9]
+[I 260331 15:06:27 train:346] Evaluate 155|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.90909091 0.9        1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 1.  1.  1.  0.9]
+[I 260331 15:06:31 train:346] Evaluate 156|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.90909091 0.9        1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 1.  1.  1.  0.9]
+[I 260331 15:06:36 train:346] Evaluate 157|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.90909091 0.9        1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 1.  1.  1.  0.9]
+[I 260331 15:06:40 train:346] Evaluate 158|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.90909091 0.9        1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 1.  1.  1.  0.9]
+[I 260331 15:06:44 train:346] Evaluate 159|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.90909091 0.9        1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 1.  1.  1.  0.9]
+[I 260331 15:06:49 train:346] Evaluate 160|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.90909091 0.9        1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 1.  1.  1.  0.9]
+[I 260331 15:06:53 train:346] Evaluate 161|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.90909091 0.9        1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 1.  1.  1.  0.9]
+[I 260331 15:06:58 train:346] Evaluate 162|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9575757575757576|IOU:[1.         1.         1.         0.90909091 0.9        1.
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 1.  1.  1.  0.9]
+[I 260331 15:07:02 train:346] Evaluate 163|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:07:07 train:346] Evaluate 164|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:07:12 train:346] Evaluate 165|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:07:16 train:346] Evaluate 166|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:07:21 train:346] Evaluate 167|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:07:25 train:346] Evaluate 168|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:07:30 train:346] Evaluate 169|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:07:34 train:346] Evaluate 170|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:07:39 train:346] Evaluate 171|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:07:43 train:346] Evaluate 172|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:07:47 train:346] Evaluate 173|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:07:52 train:346] Evaluate 174|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:07:56 train:346] Evaluate 175|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:08:01 train:346] Evaluate 176|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:08:05 train:346] Evaluate 177|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:08:10 train:346] Evaluate 178|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:08:15 train:346] Evaluate 179|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:08:19 train:346] Evaluate 180|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:08:24 train:346] Evaluate 181|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:08:28 train:346] Evaluate 182|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:08:33 train:346] Evaluate 183|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:08:37 train:346] Evaluate 184|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:08:42 train:346] Evaluate 185|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:08:46 train:346] Evaluate 186|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:08:51 train:346] Evaluate 187|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:08:55 train:346] Evaluate 188|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:09:00 train:346] Evaluate 189|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:09:04 train:346] Evaluate 190|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9363636363636364|IOU:[0.90909091 1.         1.         0.90909091 0.9        0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  1.  0.9 0.9 1.  1.  0.9]
+[I 260331 15:09:09 train:346] Evaluate 191|OA:0.9555555555555556|MACC:0.9555555555555555|Kappa:0.9500000000000002|MIOU:0.9171717171717173|IOU:[0.90909091 1.         1.         0.81818182 0.81818182 0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  0.9 0.9 0.9 1.  1.  0.9]
+[I 260331 15:09:13 train:346] Evaluate 192|OA:0.9555555555555556|MACC:0.9555555555555555|Kappa:0.9500000000000002|MIOU:0.9171717171717173|IOU:[0.90909091 1.         1.         0.81818182 0.81818182 0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  0.9 0.9 0.9 1.  1.  0.9]
+[I 260331 15:09:18 train:346] Evaluate 193|OA:0.9555555555555556|MACC:0.9555555555555555|Kappa:0.9500000000000002|MIOU:0.9171717171717173|IOU:[0.90909091 1.         1.         0.81818182 0.81818182 0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  0.9 0.9 0.9 1.  1.  0.9]
+[I 260331 15:09:22 train:346] Evaluate 194|OA:0.9555555555555556|MACC:0.9555555555555555|Kappa:0.9500000000000002|MIOU:0.9171717171717173|IOU:[0.90909091 1.         1.         0.81818182 0.81818182 0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  0.9 0.9 0.9 1.  1.  0.9]
+
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+makedirs ./RUNS/MambaHSI/LongKou/run1_seed1/vis
+x shape: torch.Size([1, 30, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])[I 260331 15:09:26 train:346] Evaluate 195|OA:0.9555555555555556|MACC:0.9555555555555555|Kappa:0.9500000000000002|MIOU:0.9171717171717173|IOU:[0.90909091 1.         1.         0.81818182 0.81818182 0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  0.9 0.9 0.9 1.  1.  0.9]
+[I 260331 15:09:31 train:346] Evaluate 196|OA:0.9555555555555556|MACC:0.9555555555555555|Kappa:0.9500000000000002|MIOU:0.9171717171717173|IOU:[0.90909091 1.         1.         0.81818182 0.81818182 0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  0.9 0.9 0.9 1.  1.  0.9]
+[I 260331 15:09:35 train:346] Evaluate 197|OA:0.9555555555555556|MACC:0.9555555555555555|Kappa:0.9500000000000002|MIOU:0.9171717171717173|IOU:[0.90909091 1.         1.         0.81818182 0.81818182 0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  0.9 0.9 0.9 1.  1.  0.9]
+[I 260331 15:09:40 train:346] Evaluate 198|OA:0.9555555555555556|MACC:0.9555555555555555|Kappa:0.9500000000000002|MIOU:0.9171717171717173|IOU:[0.90909091 1.         1.         0.81818182 0.81818182 0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  0.9 0.9 0.9 1.  1.  0.9]
+[I 260331 15:09:44 train:346] Evaluate 199|OA:0.9555555555555556|MACC:0.9555555555555555|Kappa:0.9500000000000002|MIOU:0.9171717171717173|IOU:[0.90909091 1.         1.         0.81818182 0.81818182 0.9
+     1.         0.90909091 0.9       ]|ACC:[1.  1.  1.  0.9 0.9 0.9 1.  1.  0.9]
+[I 260331 15:09:44 train:362] train_time: 901.7604206739925 seconds
+[I 260331 15:09:44 train:365] 
+    
+    ====================Starting evaluation for testing set.========================
+    
+[I 260331 15:09:46 train:397] Test 199|OA:0.9629791068752388|MACC:0.974144732164118|Kappa:0.9500000000000002|MIOU:0.8901135097306163|IOU:[0.94588289 0.94584095 0.94493671 0.94774439 0.83385711 0.97004936
+     0.94741471 0.9037377  0.57155777]|ACC:[0.96440486 0.99328054 0.99832832 0.96609257 0.96813427 0.98146267
+     0.94847499 0.97275551 0.97436886]
+[I 260331 15:09:46 train:418] 
+    ====================== exp_idx=1 seed=1 learning rate=0.0003 epochs=200 train ratio=0.1 val ratio=0.01 ======================
+    OA=0.9629791068752388
+    AA=0.974144732164118
+    kpp=0.9500000000000002
+    mIOU_test:0.8901135097306163
+    IOU_test:[0.94588289 0.94584095 0.94493671 0.94774439 0.83385711 0.97004936
+     0.94741471 0.9037377  0.57155777]
+    Acc_test:[0.96440486 0.99328054 0.99832832 0.96609257 0.96813427 0.98146267
+     0.94847499 0.97275551 0.97436886]
+    
+[I 260331 15:09:46 train:215] {'net_name': 'MambaHSI', 'dataset_index': 4, 'num_list': [30, 10], 'lr': 0.0003, 'seed_list': [0, 1, 2], 'label_smoothing': 0.0, 'spatial_mode': 'dwconv_mamba', 'class_weight_mode': 'none'}
+[I 260331 15:09:46 train:216] ImprovedMambaHSI(
+      (patch_embedding): Sequential(
+        (0): Conv2d(30, 128, kernel_size=(1, 1), stride=(1, 1))
+        (1): GroupNorm(4, 128, eps=1e-05, affine=True)
+        (2): SiLU()
+      )
+      (mamba): Sequential(
+        (0): ImprovedBothMamba(
+          (spa_mamba): ImprovedSpaMamba(
+            (pyramid_refined_attention): PyramidRefinedChannelAttention(
+              (attention_modules): ModuleList(
+                (0-2): 3 x PyramidAttention(
+                  (qkv): Conv2d(128, 384, kernel_size=(1, 1), stride=(1, 1))
+                  (qkv_dwconv): Conv2d(384, 384, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), groups=384)
+                  (project_out): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1))
+                )
+              )
+              (attention_layers): ModuleList(
+                (0-2): 3 x ModuleList(
+                  (0-1): 2 x PyramidAttention(
+                    (qkv): Conv2d(128, 384, kernel_size=(1, 1), stride=(1, 1))
+                    (qkv_dwconv): Conv2d(384, 384, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), groups=384)
+                    (project_out): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1))
+                  )
+                )
+              )
+              (project_out): Conv2d(384, 128, kernel_size=(1, 1), stride=(1, 1))
+            )
+            (mamba): Mamba(
+              (in_proj): Linear(in_features=128, out_features=512, bias=False)
+              (conv1d): Conv1d(256, 256, kernel_size=(4,), stride=(1,), padding=(3,), groups=256)
+              (act): SiLU()
+              (x_proj): Linear(in_features=256, out_features=40, bias=False)
+              (dt_proj): Linear(in_features=8, out_features=256, bias=True)
+              (out_proj): Linear(in_features=256, out_features=128, bias=False)
+            )
+            (multi_scale_conv): MultiScaleConv(
+              (conv1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+              (conv2): Conv2d(128, 128, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2))
+              (conv3): Conv2d(128, 128, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3))
+              (conv4): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1))
+              (final_conv): Conv2d(512, 128, kernel_size=(1, 1), stride=(1, 1))
+              (norm): GroupNorm(1, 128, eps=1e-05, affine=True)
+              (activation): ReLU()
+              (attention): ChannelAttention(
+                (avg_pool): AdaptiveAvgPool2d(output_size=1)
+                (fc1): Conv2d(128, 8, kernel_size=(1, 1), stride=(1, 1), bias=False)
+                (relu): ReLU()
+                (fc2): Conv2d(8, 128, kernel_size=(1, 1), stride=(1, 1), bias=False)
+                (sigmoid): Sigmoid()
+              )
+            )
+            (scsa): SCSA(
+              (local_dwc): Conv1d(32, 32, kernel_size=(3,), stride=(1,), padding=(1,), groups=32)
+              (global_dwcs): ModuleList(
+                (0): Conv1d(32, 32, kernel_size=(5,), stride=(1,), padding=(2,), groups=32)
+                (1): Conv1d(32, 32, kernel_size=(7,), stride=(1,), padding=(3,), groups=32)
+                (2): Conv1d(32, 32, kernel_size=(9,), stride=(1,), padding=(4,), groups=32)
+              )
+              (sa_gate): Sigmoid()
+              (norm_h): GroupNorm(4, 128, eps=1e-05, affine=True)
+              (norm_w): GroupNorm(4, 128, eps=1e-05, affine=True)
+              (conv_d): Identity()
+              (norm): GroupNorm(1, 128, eps=1e-05, affine=True)
+              (q): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1), groups=128, bias=False)
+              (k): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1), groups=128, bias=False)
+              (v): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1), groups=128, bias=False)
+              (attn_drop): Dropout(p=0.0, inplace=False)
+              (ca_gate): Sigmoid()
+              (down_func): AvgPool2d(kernel_size=(7, 7), stride=7, padding=0)
+            )
+            (spatial_prior): Sequential(
+              (0): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=128)
+              (1): GroupNorm(4, 128, eps=1e-05, affine=True)
+              (2): SiLU()
+            )
+            (proj): Sequential(
+              (0): GroupNorm(4, 128, eps=1e-05, affine=True)
+              (1): SiLU()
+            )
+          )
+          (spe_mamba): ImprovedSpeMamba(
+            (pyramid_refined_attention): PyramidRefinedChannelAttention(
+              (attention_modules): ModuleList(
+                (0-2): 3 x PyramidAttention(
+                  (qkv): Conv2d(128, 384, kernel_size=(1, 1), stride=(1, 1))
+                  (qkv_dwconv): Conv2d(384, 384, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), groups=384)
+                  (project_out): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1))
+                )
+              )
+              (attention_layers): ModuleList(
+                (0-2): 3 x ModuleList(
+                  (0-1): 2 x PyramidAttention(
+                    (qkv): Conv2d(128, 384, kernel_size=(1, 1), stride=(1, 1))
+                    (qkv_dwconv): Conv2d(384, 384, kernel_size=(3, 3), stride=(1, 1), padding=(2, 2), dilation=(2, 2), groups=384)
+                    (project_out): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1))
+                  )
+                )
+              )
+              (project_out): Conv2d(384, 128, kernel_size=(1, 1), stride=(1, 1))
+            )
+            (mamba): Mamba(
+              (in_proj): Linear(in_features=32, out_features=128, bias=False)
+              (conv1d): Conv1d(64, 64, kernel_size=(4,), stride=(1,), padding=(3,), groups=64)
+              (act): SiLU()
+              (x_proj): Linear(in_features=64, out_features=34, bias=False)
+              (dt_proj): Linear(in_features=2, out_features=64, bias=True)
+              (out_proj): Linear(in_features=64, out_features=32, bias=False)
+            )
+            (proj): Sequential(
+              (0): GroupNorm(4, 128, eps=1e-05, affine=True)
+              (1): SiLU()
+            )
+          )
+          (attention): Sequential(
+            (0): Conv2d(256, 128, kernel_size=(1, 1), stride=(1, 1))
+            (1): SiLU()
+            (2): Conv2d(128, 1, kernel_size=(1, 1), stride=(1, 1))
+            (3): Sigmoid()
+          )
+        )
+        (1): AvgPool2d(kernel_size=2, stride=2, padding=0)
+      )
+      (dynamic_conv): Identity()
+      (cls_head): Sequential(
+        (0): Conv2d(128, 128, kernel_size=(1, 1), stride=(1, 1))
+        (1): GroupNorm(4, 128, eps=1e-05, affine=True)
+        (2): SiLU()
+        (3): Conv2d(128, 9, kernel_size=(1, 1), stride=(1, 1))
+      )
+      (upsample): Upsample(scale_factor=2.0, mode='bilinear')
+    )
+[I 260331 15:09:46 train:247] Adam (
+    Parameter Group 0
+        amsgrad: False
+        betas: (0.9, 0.999)
+        capturable: False
+        decoupled_weight_decay: False
+        differentiable: False
+        eps: 1e-08
+        foreach: None
+        fused: None
+        lr: 0.0003
+        maximize: False
+        weight_decay: 1e-05
+    )
+[I 260331 15:09:51 train:346] Evaluate 0|OA:0.13333333333333333|MACC:0.13333333333333336|Kappa:0.025000000000000005|MIOU:0.027764326069410816|IOU:[0.         0.         0.         0.         0.13559322 0.11428571
+     0.         0.         0.        ]|ACC:[0.  0.  0.  0.  0.8 0.4 0.  0.  0. ]
+[I 260331 15:09:55 train:346] Evaluate 1|OA:0.13333333333333333|MACC:0.13333333333333336|Kappa:0.025000000000000005|MIOU:0.02757201646090535|IOU:[0.         0.         0.         0.         0.14814815 0.1
+     0.         0.         0.        ]|ACC:[0.  0.  0.  0.  0.8 0.4 0.  0.  0. ]
+[I 260331 15:10:00 train:346] Evaluate 2|OA:0.15555555555555556|MACC:0.15555555555555556|Kappa:0.05000000000000001|MIOU:0.0414208155459481|IOU:[0.         0.         0.         0.         0.17391304 0.12195122
+     0.         0.07692308 0.        ]|ACC:[0.  0.  0.  0.  0.8 0.5 0.  0.1 0. ]
+[I 260331 15:10:04 train:346] Evaluate 3|OA:0.13333333333333333|MACC:0.13333333333333336|Kappa:0.025000000000000005|MIOU:0.04000259000259|IOU:[0.         0.         0.         0.         0.18181818 0.12820513
+     0.         0.05       0.        ]|ACC:[0.  0.  0.  0.  0.6 0.5 0.  0.1 0. ]
+[I 260331 15:10:09 train:346] Evaluate 4|OA:0.12222222222222222|MACC:0.12222222222222223|Kappa:0.012500000000000002|MIOU:0.04469987228607919|IOU:[0.         0.         0.         0.         0.2        0.13333333
+     0.         0.06896552 0.        ]|ACC:[0.  0.  0.  0.  0.5 0.4 0.  0.2 0. ]
+[I 260331 15:10:13 train:346] Evaluate 5|OA:0.2|MACC:0.2|Kappa:0.10000000000000002|MIOU:0.0958769278462373|IOU:[0.         0.08695652 0.         0.         0.29411765 0.2
+     0.         0.18181818 0.1       ]|ACC:[0.  0.2 0.  0.  0.5 0.4 0.  0.6 0.1]
+[I 260331 15:10:18 train:346] Evaluate 6|OA:0.2222222222222222|MACC:0.2222222222222222|Kappa:0.125|MIOU:0.11577533577533579|IOU:[0.         0.12       0.         0.1        0.30769231 0.21428571
+     0.         0.2        0.1       ]|ACC:[0.  0.3 0.  0.2 0.4 0.3 0.  0.7 0.1]
+[I 260331 15:10:22 train:346] Evaluate 7|OA:0.23333333333333334|MACC:0.23333333333333334|Kappa:0.1375|MIOU:0.12398598896183437|IOU:[0.         0.14814815 0.08333333 0.08695652 0.25       0.23076923
+     0.         0.23333333 0.08333333]|ACC:[0.  0.4 0.1 0.2 0.3 0.3 0.  0.7 0.1]
+[I 260331 15:10:27 train:346] Evaluate 8|OA:0.3|MACC:0.30000000000000004|Kappa:0.2125|MIOU:0.17615188132429513|IOU:[0.         0.15384615 0.30769231 0.13793103 0.25       0.3
+     0.         0.26923077 0.16666667]|ACC:[0.  0.4 0.4 0.4 0.3 0.3 0.  0.7 0.2]
+[I 260331 15:10:32 train:346] Evaluate 9|OA:0.34444444444444444|MACC:0.3444444444444444|Kappa:0.2625|MIOU:0.21157962477302805|IOU:[0.         0.17391304 0.30769231 0.20689655 0.36363636 0.3
+     0.07692308 0.26086957 0.21428571]|ACC:[0.  0.4 0.4 0.6 0.4 0.3 0.1 0.6 0.3]
+[I 260331 15:10:36 train:346] Evaluate 10|OA:0.32222222222222224|MACC:0.3222222222222222|Kappa:0.23750000000000004|MIOU:0.20011132254385627|IOU:[0.         0.17391304 0.30769231 0.20689655 0.36363636 0.3
+     0.         0.13636364 0.3125    ]|ACC:[0.  0.4 0.4 0.6 0.4 0.3 0.  0.3 0.5]
+[I 260331 15:10:41 train:346] Evaluate 11|OA:0.36666666666666664|MACC:0.3666666666666667|Kappa:0.2875|MIOU:0.2311910311910312|IOU:[0.         0.22727273 0.38461538 0.21428571 0.45454545 0.3
+     0.         0.16666667 0.33333333]|ACC:[0.  0.5 0.5 0.6 0.5 0.3 0.  0.3 0.6]
+[I 260331 15:10:45 train:346] Evaluate 12|OA:0.4|MACC:0.4|Kappa:0.32500000000000007|MIOU:0.2528625963408572|IOU:[0.         0.2173913  0.46153846 0.21428571 0.5        0.3
+     0.09090909 0.23076923 0.26086957]|ACC:[0.  0.5 0.6 0.6 0.6 0.3 0.1 0.3 0.6]
+[I 260331 15:10:50 train:346] Evaluate 13|OA:0.4|MACC:0.4|Kappa:0.32500000000000007|MIOU:0.250208543469413|IOU:[0.         0.20833333 0.42857143 0.24       0.5        0.3
+     0.08333333 0.23076923 0.26086957]|ACC:[0.  0.5 0.6 0.6 0.6 0.3 0.1 0.3 0.6]
+[I 260331 15:10:54 train:346] Evaluate 14|OA:0.4777777777777778|MACC:0.47777777777777775|Kappa:0.41250000000000003|MIOU:0.3174858957467653|IOU:[0.         0.3        0.5        0.27272727 0.53846154 0.3
+     0.45454545 0.23076923 0.26086957]|ACC:[0.  0.6 0.7 0.6 0.7 0.3 0.5 0.3 0.6]
+[I 260331 15:10:58 train:346] Evaluate 15|OA:0.5111111111111111|MACC:0.5111111111111111|Kappa:0.45|MIOU:0.35544053370140327|IOU:[0.         0.3        0.57142857 0.3        0.5        0.4
+     0.7        0.16666667 0.26086957]|ACC:[0.  0.6 0.8 0.6 0.7 0.4 0.7 0.2 0.6]
+[I 260331 15:11:03 train:346] Evaluate 16|OA:0.5111111111111111|MACC:0.5111111111111111|Kappa:0.45|MIOU:0.3522003983388423|IOU:[0.         0.31578947 0.53333333 0.31578947 0.4375     0.4
+     0.7        0.25       0.2173913 ]|ACC:[0.  0.6 0.8 0.6 0.7 0.4 0.7 0.3 0.5]
+[I 260331 15:11:07 train:346] Evaluate 17|OA:0.5444444444444444|MACC:0.5444444444444445|Kappa:0.4875|MIOU:0.39148625521174535|IOU:[0.         0.35294118 0.61538462 0.33333333 0.44444444 0.5
+     0.8        0.25       0.22727273]|ACC:[0.  0.6 0.8 0.6 0.8 0.5 0.8 0.3 0.5]
+[I 260331 15:11:12 train:346] Evaluate 18|OA:0.5666666666666667|MACC:0.5666666666666667|Kappa:0.5125000000000001|MIOU:0.41159392531941547|IOU:[0.         0.4        0.64285714 0.35294118 0.4        0.6
+     0.8        0.23076923 0.27777778]|ACC:[0.  0.6 0.9 0.6 0.8 0.6 0.8 0.3 0.5]
+[I 260331 15:11:16 train:346] Evaluate 19|OA:0.5666666666666667|MACC:0.5666666666666667|Kappa:0.5125000000000001|MIOU:0.4081830206830207|IOU:[0.09090909 0.4        0.5625     0.3125     0.38095238 0.6
+     0.8        0.21428571 0.3125    ]|ACC:[0.1 0.6 0.9 0.5 0.8 0.6 0.8 0.3 0.5]
+[I 260331 15:11:21 train:346] Evaluate 20|OA:0.5777777777777777|MACC:0.5777777777777777|Kappa:0.525|MIOU:0.41579202388025915|IOU:[0.08333333 0.42857143 0.52941176 0.3125     0.4        0.54545455
+     0.8        0.28571429 0.35714286]|ACC:[0.1 0.6 0.9 0.5 0.8 0.6 0.8 0.4 0.5]
+[I 260331 15:11:25 train:346] Evaluate 21|OA:0.6|MACC:0.6000000000000001|Kappa:0.55|MIOU:0.4395654454477984|IOU:[0.09090909 0.46153846 0.64285714 0.26666667 0.4        0.61538462
+     0.8        0.29411765 0.38461538]|ACC:[0.1 0.6 0.9 0.4 0.8 0.8 0.8 0.5 0.5]
+[I 260331 15:11:30 train:346] Evaluate 22|OA:0.6333333333333333|MACC:0.6333333333333333|Kappa:0.5874999999999999|MIOU:0.4778554778554779|IOU:[0.1        0.46153846 0.76923077 0.26666667 0.4        0.61538462
+     0.9        0.33333333 0.45454545]|ACC:[0.1 0.6 1.  0.4 0.8 0.8 0.9 0.6 0.5]
+[I 260331 15:11:34 train:346] Evaluate 23|OA:0.6333333333333333|MACC:0.6333333333333333|Kappa:0.5874999999999999|MIOU:0.488462122672649|IOU:[0.1        0.46153846 0.83333333 0.2        0.38095238 0.75
+     0.9        0.31578947 0.45454545]|ACC:[0.1 0.6 1.  0.3 0.8 0.9 0.9 0.6 0.5]
+[I 260331 15:11:39 train:346] Evaluate 24|OA:0.6333333333333333|MACC:0.6333333333333333|Kappa:0.5874999999999999|MIOU:0.49098124098124096|IOU:[0.1        0.5        0.83333333 0.2        0.38095238 0.75
+     0.9        0.3        0.45454545]|ACC:[0.1 0.6 1.  0.3 0.8 0.9 0.9 0.6 0.5]
+[I 260331 15:11:43 train:346] Evaluate 25|OA:0.6555555555555556|MACC:0.6555555555555556|Kappa:0.6125000000000002|MIOU:0.5150540492645755|IOU:[0.1        0.5        0.83333333 0.2        0.4        0.75
+     0.9        0.31578947 0.63636364]|ACC:[0.1 0.6 1.  0.3 0.8 0.9 0.9 0.6 0.7]
+[I 260331 15:11:48 train:346] Evaluate 26|OA:0.6666666666666666|MACC:0.6666666666666666|Kappa:0.6250000000000001|MIOU:0.5392329892329893|IOU:[0.1        0.46153846 1.         0.2        0.38095238 0.75
+     0.9        0.33333333 0.72727273]|ACC:[0.1 0.6 1.  0.3 0.8 0.9 0.9 0.6 0.8]
+[I 260331 15:11:53 train:346] Evaluate 27|OA:0.6555555555555556|MACC:0.6555555555555554|Kappa:0.6125000000000002|MIOU:0.5302789802789802|IOU:[0.1        0.42857143 1.         0.2        0.33333333 0.75
+     0.9        0.33333333 0.72727273]|ACC:[0.1 0.6 1.  0.3 0.7 0.9 0.9 0.6 0.8]
+[I 260331 15:11:57 train:346] Evaluate 28|OA:0.6555555555555556|MACC:0.6555555555555554|Kappa:0.6125000000000002|MIOU:0.5302789802789802|IOU:[0.1        0.42857143 1.         0.2        0.33333333 0.75
+     0.9        0.33333333 0.72727273]|ACC:[0.1 0.6 1.  0.3 0.7 0.9 0.9 0.6 0.8]
+[I 260331 15:12:02 train:346] Evaluate 29|OA:0.6666666666666666|MACC:0.6666666666666666|Kappa:0.6250000000000001|MIOU:0.5315135481802149|IOU:[0.09090909 0.42857143 0.90909091 0.2        0.38888889 0.75
+     0.9        0.38888889 0.72727273]|ACC:[0.1 0.6 1.  0.3 0.7 0.9 0.9 0.7 0.8]
+[I 260331 15:12:06 train:346] Evaluate 30|OA:0.6777777777777778|MACC:0.6777777777777777|Kappa:0.6375000000000001|MIOU:0.5488536155202821|IOU:[0.09090909 0.42857143 0.90909091 0.2        0.38888889 0.83333333
+     0.9        0.38888889 0.8       ]|ACC:[0.1 0.6 1.  0.3 0.7 1.  0.9 0.7 0.8]
+[I 260331 15:12:11 train:346] Evaluate 31|OA:0.7|MACC:0.7|Kappa:0.6625|MIOU:0.57102019258882|IOU:[0.18181818 0.42857143 0.90909091 0.28571429 0.38888889 0.83333333
+     0.9        0.41176471 0.8       ]|ACC:[0.2 0.6 1.  0.4 0.7 1.  0.9 0.7 0.8]
+[I 260331 15:12:14 train:346] Evaluate 32|OA:0.7222222222222222|MACC:0.7222222222222222|Kappa:0.6875000000000001|MIOU:0.6013184427658111|IOU:[0.27272727 0.46153846 1.         0.28571429 0.42105263 0.83333333
+     0.9        0.4375     0.8       ]|ACC:[0.3 0.6 1.  0.4 0.8 1.  0.9 0.7 0.8]
+[I 260331 15:12:19 train:346] Evaluate 33|OA:0.7111111111111111|MACC:0.711111111111111|Kappa:0.6750000000000002|MIOU:0.592034817034817|IOU:[0.27272727 0.46153846 1.         0.28571429 0.4        0.83333333
+     0.9        0.375      0.8       ]|ACC:[0.3 0.6 1.  0.4 0.8 1.  0.9 0.6 0.8]
+[I 260331 15:12:23 train:346] Evaluate 34|OA:0.7444444444444445|MACC:0.7444444444444444|Kappa:0.7125|MIOU:0.6283428072901757|IOU:[0.45454545 0.53846154 1.         0.30769231 0.42105263 0.83333333
+     0.9        0.4        0.8       ]|ACC:[0.5 0.7 1.  0.4 0.8 1.  0.9 0.6 0.8]
+[I 260331 15:12:28 train:346] Evaluate 35|OA:0.7666666666666667|MACC:0.7666666666666667|Kappa:0.7375000000000002|MIOU:0.6513597513597514|IOU:[0.45454545 0.46666667 1.         0.30769231 0.5        0.83333333
+     0.9        0.5        0.9       ]|ACC:[0.5 0.7 1.  0.4 0.8 1.  0.9 0.7 0.9]
+[I 260331 15:12:32 train:346] Evaluate 36|OA:0.7777777777777778|MACC:0.7777777777777779|Kappa:0.7500000000000001|MIOU:0.6695452695452696|IOU:[0.45454545 0.46666667 1.         0.35714286 0.5        0.90909091
+     0.9        0.53846154 0.9       ]|ACC:[0.5 0.7 1.  0.5 0.8 1.  0.9 0.7 0.9]
+[I 260331 15:12:37 train:346] Evaluate 37|OA:0.7777777777777778|MACC:0.7777777777777779|Kappa:0.7500000000000001|MIOU:0.6695452695452696|IOU:[0.45454545 0.46666667 1.         0.35714286 0.5        0.90909091
+     0.9        0.53846154 0.9       ]|ACC:[0.5 0.7 1.  0.5 0.8 1.  0.9 0.7 0.9]
+[I 260331 15:12:41 train:346] Evaluate 38|OA:0.7666666666666667|MACC:0.7666666666666667|Kappa:0.7375000000000002|MIOU:0.6593600843600844|IOU:[0.45454545 0.4375     1.         0.35714286 0.4375     0.90909091
+     0.9        0.53846154 0.9       ]|ACC:[0.5 0.7 1.  0.5 0.7 1.  0.9 0.7 0.9]
+[I 260331 15:12:46 train:346] Evaluate 39|OA:0.7666666666666667|MACC:0.7666666666666667|Kappa:0.7375000000000002|MIOU:0.6593600843600844|IOU:[0.45454545 0.4375     1.         0.35714286 0.4375     0.90909091
+     0.9        0.53846154 0.9       ]|ACC:[0.5 0.7 1.  0.5 0.7 1.  0.9 0.7 0.9]
+[I 260331 15:12:50 train:346] Evaluate 40|OA:0.7777777777777778|MACC:0.7777777777777778|Kappa:0.7500000000000001|MIOU:0.6695452695452696|IOU:[0.45454545 0.5        1.         0.35714286 0.46666667 0.90909091
+     0.9        0.53846154 0.9       ]|ACC:[0.5 0.8 1.  0.5 0.7 1.  0.9 0.7 0.9]
+[I 260331 15:12:55 train:346] Evaluate 41|OA:0.7888888888888889|MACC:0.788888888888889|Kappa:0.7625000000000001|MIOU:0.6824675324675326|IOU:[0.45454545 0.5        1.         0.42857143 0.46666667 0.90909091
+     0.9        0.58333333 0.9       ]|ACC:[0.5 0.8 1.  0.6 0.7 1.  0.9 0.7 0.9]
+[I 260331 15:12:59 train:346] Evaluate 42|OA:0.8|MACC:0.8|Kappa:0.775|MIOU:0.6972823472823473|IOU:[0.45454545 0.5        1.         0.42857143 0.5        0.90909091
+     0.9        0.58333333 1.        ]|ACC:[0.5 0.8 1.  0.6 0.7 1.  0.9 0.7 1. ]
+[I 260331 15:13:04 train:346] Evaluate 43|OA:0.8111111111111111|MACC:0.8111111111111112|Kappa:0.7875|MIOU:0.7089225589225588|IOU:[0.45454545 0.53333333 1.         0.42857143 0.57142857 0.90909091
+     0.9        0.58333333 1.        ]|ACC:[0.5 0.8 1.  0.6 0.8 1.  0.9 0.7 1. ]
+[I 260331 15:13:09 train:346] Evaluate 44|OA:0.8333333333333334|MACC:0.8333333333333334|Kappa:0.8125000000000001|MIOU:0.7361712361712363|IOU:[0.45454545 0.6        1.         0.42857143 0.66666667 0.90909091
+     0.9        0.66666667 1.        ]|ACC:[0.5 0.9 1.  0.6 0.8 1.  0.9 0.8 1. ]
+[I 260331 15:13:13 train:346] Evaluate 45|OA:0.8444444444444444|MACC:0.8444444444444446|Kappa:0.8250000000000001|MIOU:0.7473711473711474|IOU:[0.54545455 0.6        1.         0.53846154 0.66666667 0.90909091
+     0.9        0.66666667 0.9       ]|ACC:[0.6 0.9 1.  0.7 0.8 1.  0.9 0.8 0.9]
+[I 260331 15:13:18 train:346] Evaluate 46|OA:0.8666666666666667|MACC:0.8666666666666667|Kappa:0.85|MIOU:0.7754338254338254|IOU:[0.54545455 0.69230769 1.         0.61538462 0.75       0.90909091
+     0.9        0.66666667 0.9       ]|ACC:[0.6 0.9 1.  0.8 0.9 1.  0.9 0.8 0.9]
+[I 260331 15:13:23 train:346] Evaluate 47|OA:0.8666666666666667|MACC:0.8666666666666667|Kappa:0.85|MIOU:0.7754338254338254|IOU:[0.54545455 0.69230769 1.         0.61538462 0.75       0.90909091
+     0.9        0.66666667 0.9       ]|ACC:[0.6 0.9 1.  0.8 0.9 1.  0.9 0.8 0.9]
+[I 260331 15:13:26 train:346] Evaluate 48|OA:0.8666666666666667|MACC:0.8666666666666667|Kappa:0.85|MIOU:0.7754338254338254|IOU:[0.54545455 0.69230769 1.         0.61538462 0.75       0.90909091
+     0.9        0.66666667 0.9       ]|ACC:[0.6 0.9 1.  0.8 0.9 1.  0.9 0.8 0.9]
+[I 260331 15:13:31 train:346] Evaluate 49|OA:0.9|MACC:0.8999999999999999|Kappa:0.8875000000000002|MIOU:0.8257446257446257|IOU:[0.72727273 0.69230769 1.         0.66666667 0.81818182 0.90909091
+     0.9        0.81818182 0.9       ]|ACC:[0.8 0.9 1.  0.8 0.9 1.  0.9 0.9 0.9]
+[I 260331 15:13:35 train:346] Evaluate 50|OA:0.9|MACC:0.8999999999999999|Kappa:0.8875000000000002|MIOU:0.8257446257446257|IOU:[0.72727273 0.69230769 1.         0.66666667 0.81818182 0.90909091
+     0.9        0.81818182 0.9       ]|ACC:[0.8 0.9 1.  0.8 0.9 1.  0.9 0.9 0.9]
+[I 260331 15:13:40 train:346] Evaluate 51|OA:0.9|MACC:0.8999999999999999|Kappa:0.8875000000000002|MIOU:0.8257446257446257|IOU:[0.72727273 0.69230769 1.         0.66666667 0.81818182 0.90909091
+     0.9        0.81818182 0.9       ]|ACC:[0.8 0.9 1.  0.8 0.9 1.  0.9 0.9 0.9]
+[I 260331 15:13:44 train:346] Evaluate 52|OA:0.9111111111111111|MACC:0.9111111111111112|Kappa:0.9000000000000001|MIOU:0.8425796425796426|IOU:[0.81818182 0.69230769 1.         0.72727273 0.81818182 0.90909091
+     0.9        0.81818182 0.9       ]|ACC:[0.9 0.9 1.  0.8 0.9 1.  0.9 0.9 0.9]
+[I 260331 15:13:49 train:346] Evaluate 53|OA:0.9111111111111111|MACC:0.9111111111111112|Kappa:0.9000000000000001|MIOU:0.8425796425796426|IOU:[0.81818182 0.69230769 1.         0.72727273 0.81818182 0.90909091
+     0.9        0.81818182 0.9       ]|ACC:[0.9 0.9 1.  0.8 0.9 1.  0.9 0.9 0.9]
+[I 260331 15:13:53 train:346] Evaluate 54|OA:0.9222222222222223|MACC:0.9222222222222223|Kappa:0.9125000000000001|MIOU:0.8607614607614608|IOU:[0.90909091 0.69230769 1.         0.8        0.81818182 0.90909091
+     0.9        0.81818182 0.9       ]|ACC:[1.  0.9 1.  0.8 0.9 1.  0.9 0.9 0.9]
+[I 260331 15:13:58 train:346] Evaluate 55|OA:0.9222222222222223|MACC:0.9222222222222223|Kappa:0.9125000000000001|MIOU:0.8607614607614608|IOU:[0.90909091 0.69230769 1.         0.8        0.81818182 0.90909091
+     0.9        0.81818182 0.9       ]|ACC:[1.  0.9 1.  0.8 0.9 1.  0.9 0.9 0.9]
+[I 260331 15:14:02 train:346] Evaluate 56|OA:0.9333333333333333|MACC:0.9333333333333333|Kappa:0.925|MIOU:0.8792929292929293|IOU:[0.90909091 0.75       1.         0.9        0.81818182 1.
+     0.81818182 0.81818182 0.9       ]|ACC:[1.  0.9 1.  0.9 0.9 1.  0.9 0.9 0.9]
+[I 260331 15:14:07 train:346] Evaluate 57|OA:0.9333333333333333|MACC:0.9333333333333333|Kappa:0.925|MIOU:0.8792929292929293|IOU:[0.90909091 0.75       1.         0.9        0.81818182 1.
+     0.81818182 0.81818182 0.9       ]|ACC:[1.  0.9 1.  0.9 0.9 1.  0.9 0.9 0.9]
+[I 260331 15:14:12 train:346] Evaluate 58|OA:0.9444444444444444|MACC:0.9444444444444444|Kappa:0.9375|MIOU:0.896969696969697|IOU:[0.90909091 0.81818182 1.         0.9        0.90909091 1.
+     0.81818182 0.81818182 0.9       ]|ACC:[1.  0.9 1.  0.9 1.  1.  0.9 0.9 0.9]
+[I 260331 15:14:16 train:346] Evaluate 59|OA:0.9555555555555556|MACC:0.9555555555555555|Kappa:0.9500000000000002|MIOU:0.9171717171717173|IOU:[0.90909091 0.9        1.         1.         0.90909091 1.
+     0.81818182 0.81818182 0.9       ]|ACC:[1.  0.9 1.  1.  1.  1.  0.9 0.9 0.9]
+[I 260331 15:14:21 train:346] Evaluate 60|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9373737373737375|IOU:[1.         0.9        1.         1.         0.90909091 1.
+     0.90909091 0.81818182 0.9       ]|ACC:[1.  0.9 1.  1.  1.  1.  1.  0.9 0.9]
+[I 260331 15:14:26 train:346] Evaluate 61|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9373737373737375|IOU:[1.         0.9        1.         1.         0.90909091 1.
+     0.90909091 0.81818182 0.9       ]|ACC:[1.  0.9 1.  1.  1.  1.  1.  0.9 0.9]
+[I 260331 15:14:30 train:346] Evaluate 62|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9373737373737375|IOU:[1.         0.9        1.         1.         0.90909091 1.
+     0.90909091 0.81818182 0.9       ]|ACC:[1.  0.9 1.  1.  1.  1.  1.  0.9 0.9]
+[I 260331 15:14:35 train:346] Evaluate 63|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9373737373737375|IOU:[1.         0.9        1.         1.         0.90909091 1.
+     0.90909091 0.81818182 0.9       ]|ACC:[1.  0.9 1.  1.  1.  1.  1.  0.9 0.9]
+[I 260331 15:14:39 train:346] Evaluate 64|OA:0.9666666666666667|MACC:0.9666666666666666|Kappa:0.9625000000000001|MIOU:0.9373737373737375|IOU:[1.         0.9        1.         1.         0.90909091 1.
+     0.90909091 0.81818182 0.9       ]|ACC:[1.  0.9 1.  1.  1.  1.  1.  0.9 0.9]
+[I 260331 15:14:43 train:346] Evaluate 65|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9585858585858585|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.81818182 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 0.9]
+[I 260331 15:14:48 train:346] Evaluate 66|OA:0.9777777777777777|MACC:0.9777777777777779|Kappa:0.9750000000000001|MIOU:0.9585858585858585|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.81818182 0.9       ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 0.9]
+[I 260331 15:14:52 train:346] Evaluate 67|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:14:57 train:346] Evaluate 68|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:15:01 train:346] Evaluate 69|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:15:06 train:346] Evaluate 70|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:15:10 train:346] Evaluate 71|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:15:15 train:346] Evaluate 72|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:15:20 train:346] Evaluate 73|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:15:24 train:346] Evaluate 74|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:15:29 train:346] Evaluate 75|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:15:33 train:346] Evaluate 76|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:15:38 train:346] Evaluate 77|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:15:43 train:346] Evaluate 78|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         1.         1.         1.
+     0.90909091 0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:15:47 train:346] Evaluate 79|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:15:52 train:346] Evaluate 80|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:15:56 train:346] Evaluate 81|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:16:01 train:346] Evaluate 82|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:16:05 train:346] Evaluate 83|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:16:10 train:346] Evaluate 84|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:16:14 train:346] Evaluate 85|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:16:19 train:346] Evaluate 86|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:16:23 train:346] Evaluate 87|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:16:28 train:346] Evaluate 88|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:16:32 train:346] Evaluate 89|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:16:37 train:346] Evaluate 90|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:16:41 train:346] Evaluate 91|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:16:46 train:346] Evaluate 92|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:16:51 train:346] Evaluate 93|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:16:55 train:346] Evaluate 94|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:00 train:346] Evaluate 95|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:05 train:346] Evaluate 96|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:09 train:346] Evaluate 97|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:14 train:346] Evaluate 98|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:18 train:346] Evaluate 99|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:23 train:346] Evaluate 100|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:27 train:346] Evaluate 101|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:32 train:346] Evaluate 102|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:37 train:346] Evaluate 103|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:41 train:346] Evaluate 104|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:46 train:346] Evaluate 105|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:50 train:346] Evaluate 106|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:55 train:346] Evaluate 107|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:17:59 train:346] Evaluate 108|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:18:04 train:346] Evaluate 109|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:18:08 train:346] Evaluate 110|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:18:13 train:346] Evaluate 111|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:18:18 train:346] Evaluate 112|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:18:22 train:346] Evaluate 113|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:18:27 train:346] Evaluate 114|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:18:32 train:346] Evaluate 115|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:18:36 train:346] Evaluate 116|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:18:41 train:346] Evaluate 117|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:18:45 train:346] Evaluate 118|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:18:50 train:346] Evaluate 119|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:18:54 train:346] Evaluate 120|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:18:59 train:346] Evaluate 121|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:19:04 train:346] Evaluate 122|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:19:08 train:346] Evaluate 123|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:19:13 train:346] Evaluate 124|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:19:18 train:346] Evaluate 125|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:19:22 train:346] Evaluate 126|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:19:26 train:346] Evaluate 127|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:19:31 train:346] Evaluate 128|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:19:35 train:346] Evaluate 129|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:19:40 train:346] Evaluate 130|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:19:44 train:346] Evaluate 131|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:19:49 train:346] Evaluate 132|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:19:53 train:346] Evaluate 133|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:19:58 train:346] Evaluate 134|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:03 train:346] Evaluate 135|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:07 train:346] Evaluate 136|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:12 train:346] Evaluate 137|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:16 train:346] Evaluate 138|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:21 train:346] Evaluate 139|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:26 train:346] Evaluate 140|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:30 train:346] Evaluate 141|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:35 train:346] Evaluate 142|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:38 train:346] Evaluate 143|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:42 train:346] Evaluate 144|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:45 train:346] Evaluate 145|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:48 train:346] Evaluate 146|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:52 train:346] Evaluate 147|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:56 train:346] Evaluate 148|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:20:59 train:346] Evaluate 149|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:21:03 train:346] Evaluate 150|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:21:07 train:346] Evaluate 151|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:21:10 train:346] Evaluate 152|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:21:14 train:346] Evaluate 153|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:21:17 train:346] Evaluate 154|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:21:21 train:346] Evaluate 155|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:21:24 train:346] Evaluate 156|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:21:28 train:346] Evaluate 157|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:21:31 train:346] Evaluate 158|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:21:35 train:346] Evaluate 159|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:21:38 train:346] Evaluate 160|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:21:42 train:346] Evaluate 161|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:21:45 train:346] Evaluate 162|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:21:49 train:346] Evaluate 163|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:21:51 train:346] Evaluate 164|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:21:53 train:346] Evaluate 165|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:21:54 train:346] Evaluate 166|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:21:56 train:346] Evaluate 167|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:21:57 train:346] Evaluate 168|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:21:59 train:346] Evaluate 169|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:00 train:346] Evaluate 170|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:02 train:346] Evaluate 171|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:03 train:346] Evaluate 172|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:04 train:346] Evaluate 173|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:06 train:346] Evaluate 174|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:22:07 train:346] Evaluate 175|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:09 train:346] Evaluate 176|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:10 train:346] Evaluate 177|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:12 train:346] Evaluate 178|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:13 train:346] Evaluate 179|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:15 train:346] Evaluate 180|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:16 train:346] Evaluate 181|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:18 train:346] Evaluate 182|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:19 train:346] Evaluate 183|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:21 train:346] Evaluate 184|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:22 train:346] Evaluate 185|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:24 train:346] Evaluate 186|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:25 train:346] Evaluate 187|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:27 train:346] Evaluate 188|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:28 train:346] Evaluate 189|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:29 train:346] Evaluate 190|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:31 train:346] Evaluate 191|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:32 train:346] Evaluate 192|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+makedirs ./RUNS/MambaHSI/LongKou/run2_seed2/vis
+x shape: torch.Size([1, 30, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])[I 260331 15:22:34 train:346] Evaluate 193|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:35 train:346] Evaluate 194|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:37 train:346] Evaluate 195|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:38 train:346] Evaluate 196|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:40 train:346] Evaluate 197|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:41 train:346] Evaluate 198|OA:1.0|MACC:1.0|Kappa:1.0|MIOU:1.0|IOU:[1. 1. 1. 1. 1. 1. 1. 1. 1.]|ACC:[1. 1. 1. 1. 1. 1. 1. 1. 1.]
+[I 260331 15:22:43 train:346] Evaluate 199|OA:0.9888888888888889|MACC:0.9888888888888889|Kappa:0.9875|MIOU:0.9787878787878788|IOU:[1.         1.         1.         0.90909091 1.         1.
+     1.         0.9        1.        ]|ACC:[1.  1.  1.  1.  1.  1.  1.  0.9 1. ]
+[I 260331 15:22:43 train:362] train_time: 776.8999490739661 seconds
+[I 260331 15:22:43 train:365] 
+    
+    ====================Starting evaluation for testing set.========================
+    
+[I 260331 15:22:43 train:397] Test 199|OA:0.9512983514707467|MACC:0.95917651917729|Kappa:0.9875|MIOU:0.8970616805162488|IOU:[0.89383375 0.95092745 0.91728167 0.90201514 0.91888176 0.96850658
+     0.92322804 0.87066077 0.72821997]|ACC:[0.90368716 0.97192225 0.99732531 0.95798772 0.97543177 0.97875402
+     0.96074072 0.91699605 0.96974369]
+[I 260331 15:22:43 train:418] 
+    ====================== exp_idx=2 seed=2 learning rate=0.0003 epochs=200 train ratio=0.1 val ratio=0.01 ======================
+    OA=0.9512983514707467
+    AA=0.95917651917729
+    kpp=0.9875
+    mIOU_test:0.8970616805162488
+    IOU_test:[0.89383375 0.95092745 0.91728167 0.90201514 0.91888176 0.96850658
+     0.92322804 0.87066077 0.72821997]
+    Acc_test:[0.90368716 0.97192225 0.99732531 0.95798772 0.97543177 0.97875402
+     0.96074072 0.91699605 0.96974369]
+    
+[I 260331 15:22:43 train:439] 
+    ====================Mean result of 3 times runs =========================
+[I 260331 15:22:43 train:441] List of OA: [np.float64(0.9693851563800923), np.float64(0.9629791068752388), np.float64(0.9512983514707467)]
+[I 260331 15:22:43 train:442] List of AA: [np.float64(0.961568076022935), np.float64(0.974144732164118), np.float64(0.95917651917729)]
+[I 260331 15:22:43 train:443] List of KPP: [np.float64(0.9875), np.float64(0.9500000000000002), np.float64(0.9875)]
+[I 260331 15:22:43 train:444] OA: 96.12 ± 0.75
+[I 260331 15:22:43 train:445] AA: 96.50 ± 0.66
+[I 260331 15:22:43 train:446] Kpp: 97.50 ± 1.77
+[I 260331 15:22:43 train:447] Acc per class: [94.75, 98.21, 99.08, 96.13, 95.45, 98.5, 96.27, 94.36, 95.73] ± [3.12, 0.88, 1.0, 0.35, 2.46, 0.7, 1.24, 2.28, 2.1]
+[I 260331 15:22:43 train:467] Average training time: 850.91 ± 53.540
+[I 260331 15:22:43 train:468] Average testing time: 1103.70 ± 325.586
+
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
+seg_logits: torch.Size([1, 9, 550, 400])
