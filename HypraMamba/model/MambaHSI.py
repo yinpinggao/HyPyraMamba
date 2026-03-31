@@ -328,21 +328,23 @@ class ChannelAttention(nn.Module):
 
 
 class ImprovedSpeMamba(nn.Module):
-    def __init__(self, channels, token_num=4, use_residual=True, group_num=4, num_scales=3, num_layers=2):
+    def __init__(self, channels, token_num=4, use_residual=True, group_num=4, num_scales=3, num_layers=2,
+                 use_internal_prca=True):
         super(ImprovedSpeMamba, self).__init__()
         self.token_num = token_num
         self.use_residual = use_residual
+        self.use_internal_prca = use_internal_prca
         # Set group_channel_num based on token_num and channels
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
-        # Initialize PyramidRefinedChannelAttention
+        # Keep PRCA optional so the spectral branch can reuse shared attention from the outer model.
         self.pyramid_refined_attention = PyramidRefinedChannelAttention(
             dim=self.channel_num,  # Apply attention on channel_num
             num_heads=4,  # You can adjust num_heads as per your requirements
             bias=True,
             num_scales=num_scales,
             num_layers=num_layers
-        )
+        ) if use_internal_prca else nn.Identity()
         # Initialize Mamba module for feature learning
         self.mamba = Mamba(
             d_model=self.group_channel_num,
@@ -369,7 +371,7 @@ class ImprovedSpeMamba(nn.Module):
     def forward(self, x):
         # Apply padding to the input if necessary
         x_pad = self.padding_feature(x)
-        # Apply PyramidRefinedChannelAttention directly to the input tensor
+        # Apply PyramidRefinedChannelAttention directly to the input tensor when enabled.
         x_re = self.pyramid_refined_attention(x_pad)
 
         # Flatten the input for Mamba
@@ -552,6 +554,54 @@ class ImprovedMambaHSI(nn.Module):
         x = self.dynamic_conv(x)
         logits = self.cls_head(x) # [B, num_classes, H/2, W/2]
         # logits = self.upsample(logits) # [B, num_classes, H, W]
+        return logits
+
+
+class SpeOnlyMambaHSI(nn.Module):
+    def __init__(self, in_channels=128, hidden_dim=128, num_classes=10,
+                 use_residual=True, token_num=4, group_num=4):
+        super(SpeOnlyMambaHSI, self).__init__()
+
+        self.patch_embedding = nn.Sequential(
+            nn.Conv2d(in_channels=in_channels, out_channels=hidden_dim, kernel_size=1, stride=1, padding=0),
+            nn.GroupNorm(group_num, hidden_dim),
+            nn.SiLU()
+        )
+
+        self.shared_prca = PyramidRefinedChannelAttention(
+            dim=hidden_dim,
+            num_heads=4,
+            bias=True,
+            num_scales=3,
+            num_layers=2
+        )
+
+        self.spe_mamba = nn.Sequential(
+            ImprovedSpeMamba(
+                hidden_dim,
+                token_num=token_num,
+                use_residual=use_residual,
+                group_num=group_num,
+                use_internal_prca=False
+            ),
+            nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
+        )
+
+        self.dynamic_conv = DynamicConvBlock(channels=hidden_dim)
+
+        self.cls_head = nn.Sequential(
+            nn.Conv2d(in_channels=hidden_dim, out_channels=128, kernel_size=1, stride=1, padding=0),
+            nn.GroupNorm(group_num, 128),
+            nn.SiLU(),
+            nn.Conv2d(in_channels=128, out_channels=num_classes, kernel_size=1, stride=1, padding=0)
+        )
+
+    def forward(self, x):
+        x = self.patch_embedding(x)
+        x = self.shared_prca(x)
+        x = self.spe_mamba(x)
+        x = self.dynamic_conv(x)
+        logits = self.cls_head(x)
         return logits
 
 
