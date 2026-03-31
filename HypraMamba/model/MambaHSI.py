@@ -328,29 +328,33 @@ class ChannelAttention(nn.Module):
 
 
 class ImprovedSpeMamba(nn.Module):
-    def __init__(self, channels, token_num=4, use_residual=True, group_num=4, num_scales=3, num_layers=2):
+    def __init__(self, channels, token_num=4, use_residual=True, group_num=4, num_scales=3, num_layers=2,
+                 use_internal_prca=True):
         super(ImprovedSpeMamba, self).__init__()
         self.token_num = token_num
         self.use_residual = use_residual
-        # Set group_channel_num based on token_num and channels
+        self.use_internal_prca = use_internal_prca
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
-        # Initialize PyramidRefinedChannelAttention
-        self.pyramid_refined_attention = PyramidRefinedChannelAttention(
-            dim=self.channel_num,  # Apply attention on channel_num
-            num_heads=4,  # You can adjust num_heads as per your requirements
-            bias=True,
-            num_scales=num_scales,
-            num_layers=num_layers
-        )
-        # Initialize Mamba module for feature learning
+
+        if self.use_internal_prca:
+            self.pyramid_refined_attention = PyramidRefinedChannelAttention(
+                dim=self.channel_num,
+                num_heads=4,
+                bias=True,
+                num_scales=num_scales,
+                num_layers=num_layers
+            )
+        else:
+            self.pyramid_refined_attention = nn.Identity()
+
         self.mamba = Mamba(
             d_model=self.group_channel_num,
             d_state=16,
             d_conv=4,
             expand=2,
         )
-        # Projection layer to project the concatenated feature maps to the output
+
         self.proj = nn.Sequential(
             nn.GroupNorm(group_num, self.channel_num),
             nn.SiLU()
@@ -360,53 +364,42 @@ class ImprovedSpeMamba(nn.Module):
         B, C, H, W = x.shape
         if C < self.channel_num:
             pad_c = self.channel_num - C
-            pad_features = torch.zeros((B, pad_c, H, W)).to(x.device)
-            cat_features = torch.cat([x, pad_features], dim=1)
-            return cat_features
-        else:
-            return x
+            pad_features = torch.zeros((B, pad_c, H, W), device=x.device, dtype=x.dtype)
+            return torch.cat([x, pad_features], dim=1)
+        return x
 
     def forward(self, x):
-        # Apply padding to the input if necessary
         x_pad = self.padding_feature(x)
-        # Apply PyramidRefinedChannelAttention directly to the input tensor
         x_re = self.pyramid_refined_attention(x_pad)
-
-        # Flatten the input for Mamba
         B, C, H, W = x_re.shape
-        x_re_flat = x_re.view(B * H * W, self.token_num, self.group_channel_num)  # Flatten for Mamba
-        # Add first-order spectral differences before Mamba without changing dimensions.
-        x_diff = torch.diff(x_re_flat, n=1, dim=1)
-        x_diff = F.pad(x_diff, (0, 0, 0, 1))
-        x_re_flat = x_re_flat + x_diff
-        # Apply Mamba for feature learning
+        x_re_flat = x_re.view(B * H * W, self.token_num, self.group_channel_num)
         x_recon = self.mamba(x_re_flat)
-
-        # Reshape back to original dimensions
         x_recon = x_recon.view(B, C, H, W)
-        # Apply the final projection to map the feature map to the output space
         x_recon = self.proj(x_recon)
-        # If residual connection is enabled, add the input to the output
-        return x_recon + x if self.use_residual else x_recon
+        return x_recon + x_pad if self.use_residual else x_recon
 
 
 class ImprovedSpaMamba(nn.Module):
-    def __init__(self, channels, use_residual=True, group_num=4, token_num=4,  num_scales=3, num_layers=2,
-                 spatial_mode='baseline'):
+    def __init__(self, channels, use_residual=True, group_num=4, token_num=4, num_scales=3, num_layers=2,
+                 use_internal_prca=True, spatial_mode='baseline'):
         super(ImprovedSpaMamba, self).__init__()
         self.use_residual = use_residual
+        self.use_internal_prca = use_internal_prca
         self.token_num = token_num
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
         self.spatial_mode = spatial_mode
-        # Initialize PyramidRefinedChannelAttention
-        self.pyramid_refined_attention = PyramidRefinedChannelAttention(
-            dim=self.channel_num,  # Apply attention on channel_num
-            num_heads=4,  # You can adjust num_heads as per your requirements
-            bias=True,
-            num_scales=num_scales,
-            num_layers=num_layers
-        )
+
+        if self.use_internal_prca:
+            self.pyramid_refined_attention = PyramidRefinedChannelAttention(
+                dim=self.channel_num,
+                num_heads=4,
+                bias=True,
+                num_scales=num_scales,
+                num_layers=num_layers
+            )
+        else:
+            self.pyramid_refined_attention = nn.Identity()
 
         self.mamba = Mamba(
             d_model=channels,
@@ -436,23 +429,12 @@ class ImprovedSpaMamba(nn.Module):
 
     def forward(self, x):
         x = self.spatial_prior(x)
-        # 首先应用多尺度卷积
-        # x_re = self.multi_scale_conv(x)
         x_re = self.pyramid_refined_attention(x)
-        # 然后应用 SCSA 模块进行空间-通道自注意力
-        # x_re = self.scsa(x)  # Apply SCSA (Spatial-Channel Self Attention)
-
-        # 将数据展平并通过 Mamba
         B, C, H, W = x_re.shape
-        x_flat = x_re.permute(0, 2, 3, 1).reshape(B, H * W, C)
+        x_flat = x_re.view(B * H * W, 1, C)
         x_flat = self.mamba(x_flat)
-
-        # 重塑回原始形状
-        x_recon = x_flat.reshape(B, H, W, C).permute(0, 3, 1, 2)
-
-        # 应用最后的投影层
+        x_recon = x_flat.view(B, C, H, W)
         x_recon = self.proj(x_recon)
-
         return x_recon + x if self.use_residual else x_recon
 
 class ImprovedBothMamba(nn.Module):
@@ -464,9 +446,16 @@ class ImprovedBothMamba(nn.Module):
             channels,
             use_residual=use_residual,
             group_num=group_num,
+            use_internal_prca=False,
             spatial_mode=spatial_mode
         )
-        self.spe_mamba = ImprovedSpeMamba(channels, token_num=token_num, use_residual=use_residual, group_num=group_num)
+        self.spe_mamba = ImprovedSpeMamba(
+            channels,
+            token_num=token_num,
+            use_residual=use_residual,
+            group_num=group_num,
+            use_internal_prca=False
+        )
 
         # 学习的注意力权重
         self.attention = nn.Sequential(
@@ -506,20 +495,34 @@ class ImprovedMambaHSI(nn.Module):
             nn.SiLU()
         )
 
-        # Choose between different Mamba modules
+        self.shared_prca = PyramidRefinedChannelAttention(
+            dim=hidden_dim,
+            num_heads=4,
+            bias=True,
+            num_scales=3,
+            num_layers=2
+        )
+
         if mamba_type == 'spa':
             self.mamba = nn.Sequential(
                 ImprovedSpaMamba(
                     hidden_dim,
                     use_residual=use_residual,
                     group_num=group_num,
+                    use_internal_prca=False,
                     spatial_mode=spatial_mode
                 ),
                 nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
             )
         elif mamba_type == 'spe':
             self.mamba = nn.Sequential(
-                ImprovedSpeMamba(hidden_dim, token_num=token_num, use_residual=use_residual, group_num=group_num),
+                ImprovedSpeMamba(
+                    hidden_dim,
+                    token_num=token_num,
+                    use_residual=use_residual,
+                    group_num=group_num,
+                    use_internal_prca=False
+                ),
                 nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
             )
         elif mamba_type == 'both':
@@ -548,10 +551,10 @@ class ImprovedMambaHSI(nn.Module):
 
     def forward(self, x):
         x = self.patch_embedding(x)
-        x = self.mamba(x)    # 下采样到 H/2, W/2
+        x = self.shared_prca(x)
+        x = self.mamba(x)
         x = self.dynamic_conv(x)
-        logits = self.cls_head(x) # [B, num_classes, H/2, W/2]
-        # logits = self.upsample(logits) # [B, num_classes, H, W]
+        logits = self.cls_head(x)
         return logits
 
 
