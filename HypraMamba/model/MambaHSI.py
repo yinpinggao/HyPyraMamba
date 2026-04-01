@@ -567,6 +567,9 @@ class ImprovedMambaHSI(nn.Module):
                  token_num=4, group_num=4, spatial_mode='baseline'):
         super(ImprovedMambaHSI, self).__init__()
         self.mamba_type = mamba_type
+        mid_channels = max(hidden_dim // 2, group_num)
+        if mid_channels % group_num != 0:
+            mid_channels += group_num - mid_channels % group_num
 
         # Patch Embedding Layer
         self.patch_embedding = nn.Sequential(
@@ -613,13 +616,24 @@ class ImprovedMambaHSI(nn.Module):
             nn.SiLU(),
             nn.Conv2d(in_channels=128, out_channels=num_classes, kernel_size=1, stride=1, padding=0)
         )
+        self.recon_head = nn.Sequential(
+            nn.Conv2d(hidden_dim, mid_channels, kernel_size=1, stride=1, padding=0),
+            nn.GroupNorm(group_num, mid_channels),
+            nn.SiLU(),
+            nn.Conv2d(mid_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        )
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
 
-    def forward(self, x):
+    def forward(self, x, return_aux=False):
         x = self.patch_embedding(x)
-        x = self.mamba(x)    # 下采样到 H/2, W/2
-        logits = self.cls_head(x) # [B, num_classes, H/2, W/2]
+        x_feat = self.mamba(x)    # 下采样到 H/2, W/2
+        logits = self.cls_head(x_feat) # [B, num_classes, H/2, W/2]
         # logits = self.upsample(logits) # [B, num_classes, H, W]
+
+        if return_aux:
+            recon = self.recon_head(x_feat)
+            return logits, recon
+
         return logits
 
 

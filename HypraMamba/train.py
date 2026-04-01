@@ -80,6 +80,8 @@ def get_parser():
     parser.add_argument('--label_smoothing', type=float, default=None)
     parser.add_argument('--spatial_mode', type=str, default='auto', choices=['auto', 'baseline', 'dwconv_mamba'])
     parser.add_argument('--class_weight_mode', type=str, default='auto', choices=['auto', 'none', 'balanced'])
+    parser.add_argument('--lambda_recon', type=float, default=0.05)
+    parser.add_argument('--recon_loss_type', type=str, default='smoothl1')
 
     args = parser.parse_args()
     return args
@@ -96,6 +98,7 @@ num_list = [args.train_samples, args.val_samples] # 用于存储训练样本数�
 dataset_index = args.dataset_index # 选择的数据集索引（如 0、1、2 等），通过索引选择不同的数据集。
 max_epoch = args.max_epoch
 learning_rate = args.lr
+lambda_recon = args.lambda_recon
 net_name = 'MambaHSI'
 data_set_name_list = ['UP', 'HanChuan', 'HongHu', 'Houston','LongKou','Salinas','indian','Botswana','XuZhou','Pavia']
 data_set_name = data_set_name_list[dataset_index]
@@ -125,11 +128,23 @@ paras_dict = {
     'label_smoothing': label_smoothing,
     'spatial_mode': spatial_mode,
     'class_weight_mode': class_weight_mode,
+    'lambda_recon': lambda_recon,
+    'recon_loss_type': args.recon_loss_type,
 }
 
 transform = transforms.Compose([
     transforms.ToTensor(),
 ])
+
+
+def compute_recon_loss(recon_loss_func, recon_pred, target):
+    recon_pred_up = resize(
+        input=recon_pred,
+        size=target.shape[2:],
+        mode='bilinear',
+        align_corners=False
+    )
+    return recon_loss_func(recon_pred_up, target)
 
 if __name__ == '__main__':
     data_set_path = args.data_set_path   # ./data
@@ -231,6 +246,11 @@ if __name__ == '__main__':
         else:
             loss_func = torch.nn.CrossEntropyLoss(ignore_index=-1, label_smoothing=label_smoothing)
 
+        if args.recon_loss_type == 'mse':
+            recon_loss_func = torch.nn.MSELoss()
+        else:
+            recon_loss_func = torch.nn.SmoothL1Loss()
+
         train_label = train_label.to(device)
         test_label = test_label.to(device)
         val_label = val_label.to(device)
@@ -272,35 +292,56 @@ if __name__ == '__main__':
                 y_part2 = y_train[:, x.shape[2] // 2 - 5:, :]
 
                 # 第一部分前向传播
-                y_pred_part1 = net(x_part1)
-                ls1 = head_loss(loss_func, y_pred_part1, y_part1.long())
+                y_pred_part1, recon_part1 = net(x_part1, return_aux=True)
+                cls_loss_part1 = head_loss(loss_func, y_pred_part1, y_part1.long())
+                recon_loss_part1 = compute_recon_loss(recon_loss_func, recon_part1, x_part1)
+                ls1 = cls_loss_part1 + lambda_recon * recon_loss_part1
                 optimizer.zero_grad()
                 ls1.backward()
                 optimizer.step()
                 torch.cuda.empty_cache()
 
                 # 第二部分前向传播
-                y_pred_part2 = net(x_part2)
-                ls2 = head_loss(loss_func, y_pred_part2, y_part2.long())
+                y_pred_part2, recon_part2 = net(x_part2, return_aux=True)
+                cls_loss_part2 = head_loss(loss_func, y_pred_part2, y_part2.long())
+                recon_loss_part2 = compute_recon_loss(recon_loss_func, recon_part2, x_part2)
+                ls2 = cls_loss_part2 + lambda_recon * recon_loss_part2
                 optimizer.zero_grad()
                 ls2.backward()
                 optimizer.step()
                 torch.cuda.empty_cache()
 
-                logger.info('Iter:{}|loss:{}'.format(epoch, (ls1 + ls2).detach().cpu().numpy()))
+                logger.info(
+                    'Iter:{}|cls_loss:{}|recon_loss:{}|total_loss:{}'.format(
+                        epoch,
+                        (cls_loss_part1 + cls_loss_part2).detach().cpu().numpy(),
+                        (recon_loss_part1 + recon_loss_part2).detach().cpu().numpy(),
+                        (ls1 + ls2).detach().cpu().numpy()
+                    )
+                )
 
 
             else:
                 try:
                     # autocast()：这个上下文管理器启用混合精度训练，它可以减少计算时间并减少显存占用。scaler 用于处理梯度缩放，使得反向传播时能更稳定。
                     with autocast():
-                         y_pred = net(x)
-                         ls = head_loss(loss_func, y_pred, y_train.long())
+                         y_pred, recon_pred = net(x, return_aux=True)
+                         cls_loss = head_loss(loss_func, y_pred, y_train.long())
+                         recon_loss = compute_recon_loss(recon_loss_func, recon_pred, x)
+                         ls = cls_loss + lambda_recon * recon_loss
                     optimizer.zero_grad()
                     scaler.scale(ls).backward()
                     scaler.step(optimizer)
                     scaler.update()
                     torch.cuda.empty_cache()
+                    logger.info(
+                        'Iter:{}|cls_loss:{}|recon_loss:{}|total_loss:{}'.format(
+                            epoch,
+                            cls_loss.detach().cpu().numpy(),
+                            recon_loss.detach().cpu().numpy(),
+                            ls.detach().cpu().numpy()
+                        )
+                    )
 
                 # except 处理：如果内存不足或计算出现问题（比如 OOM 错误），会切换为 split_image = True，重新将图像切分为两部分并训练。这是一个容错机制，防止内存不足导致训练崩溃。
                 except:
@@ -312,19 +353,30 @@ if __name__ == '__main__':
                     x_part2 = x[:, :, x.shape[2] // 2 - 5:, :]
                     y_part2 = y_train[:, x.shape[2] // 2 - 5:, :]
 
-                    y_pred_part1 = net(x_part1)
-                    ls1 = head_loss(loss_func, y_pred_part1, y_part1.long())
+                    y_pred_part1, recon_part1 = net(x_part1, return_aux=True)
+                    cls_loss_part1 = head_loss(loss_func, y_pred_part1, y_part1.long())
+                    recon_loss_part1 = compute_recon_loss(recon_loss_func, recon_part1, x_part1)
+                    ls1 = cls_loss_part1 + lambda_recon * recon_loss_part1
                     optimizer.zero_grad()
                     ls1.backward()
                     optimizer.step()
 
-                    y_pred_part2 = net(x_part2)
-                    ls2 = head_loss(loss_func, y_pred_part2, y_part2.long())
+                    y_pred_part2, recon_part2 = net(x_part2, return_aux=True)
+                    cls_loss_part2 = head_loss(loss_func, y_pred_part2, y_part2.long())
+                    recon_loss_part2 = compute_recon_loss(recon_loss_func, recon_part2, x_part2)
+                    ls2 = cls_loss_part2 + lambda_recon * recon_loss_part2
                     optimizer.zero_grad()
                     ls2.backward()
                     optimizer.step()
 
-                    logger.info('Iter:{}|loss:{}'.format(epoch, (ls1 + ls2).detach().cpu().numpy()))
+                    logger.info(
+                        'Iter:{}|cls_loss:{}|recon_loss:{}|total_loss:{}'.format(
+                            epoch,
+                            (cls_loss_part1 + cls_loss_part2).detach().cpu().numpy(),
+                            (recon_loss_part1 + recon_loss_part2).detach().cpu().numpy(),
+                            (ls1 + ls2).detach().cpu().numpy()
+                        )
+                    )
 
             torch.cuda.empty_cache()
 
