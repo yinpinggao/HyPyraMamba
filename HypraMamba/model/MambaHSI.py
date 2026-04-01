@@ -460,6 +460,13 @@ class CollaborativeFusion(nn.Module):
         super(CollaborativeFusion, self).__init__()
         mid = max(channels // reduction, 8)
 
+        self.norm_spa = nn.GroupNorm(group_num, channels)
+        self.norm_spe = nn.GroupNorm(group_num, channels)
+
+        self.alpha = nn.Parameter(torch.tensor(0.1))
+        self.gamma = nn.Parameter(torch.tensor(0.1))
+        self.beta = nn.Parameter(torch.tensor(0.1))
+
         self.spatial_mix = nn.Sequential(
             nn.Conv2d(channels * 2, channels, kernel_size=1),
             nn.SiLU(),
@@ -489,21 +496,27 @@ class CollaborativeFusion(nn.Module):
         )
 
     def forward(self, spa_x, spe_x, identity):
-        fusion = torch.cat([spa_x, spe_x], dim=1)
+        spa_n = self.norm_spa(spa_x)
+        spe_n = self.norm_spe(spe_x)
+
+        fusion = torch.cat([spa_n, spe_n], dim=1)
 
         spatial_weights = self.spatial_mix(fusion)
         w_spa, w_spe = torch.chunk(spatial_weights, 2, dim=1)
         w_spa = torch.sigmoid(w_spa)
         w_spe = torch.sigmoid(w_spe)
 
-        spa_s = spa_x + w_spe * spe_x
-        spe_s = spe_x + w_spa * spa_x
+        spa_s = spa_x + self.alpha * (w_spe * spe_n)
+        spe_s = spe_x + self.alpha * (w_spa * spa_n)
 
-        spa_c = spa_s + self.channel_spe(spe_s) * spe_s
-        spe_c = spe_s + self.channel_spa(spa_s) * spa_s
+        spa_gate = self.channel_spe(spe_s)
+        spe_gate = self.channel_spa(spa_s)
 
-        out = self.out_proj(torch.cat([spa_c, spe_c], dim=1))
-        return out + identity
+        spa_c = spa_s + self.gamma * (spa_gate * spe_s)
+        spe_c = spe_s + self.gamma * (spe_gate * spa_s)
+
+        fused = self.out_proj(torch.cat([spa_c, spe_c], dim=1))
+        return identity + self.beta * fused
 
 class ImprovedBothMamba(nn.Module):
     def __init__(self, channels, token_num, use_residual, group_num=4, spatial_mode='baseline'):
