@@ -390,6 +390,37 @@ class ImprovedSpeMamba(nn.Module):
         return x_recon + x if self.use_residual else x_recon
 
 
+class LightSpatialPrior(nn.Module):
+    def __init__(self, channels, group_num=4, reduction=4):
+        super(LightSpatialPrior, self).__init__()
+        mid = max(channels // reduction, 8)
+
+        self.dw = nn.Conv2d(
+            channels, channels,
+            kernel_size=3, padding=1, groups=channels
+        )
+
+        self.spatial_gate = nn.Sequential(
+            nn.Conv2d(channels, mid, kernel_size=1),
+            nn.SiLU(),
+            nn.Conv2d(mid, 1, kernel_size=1),
+            nn.Sigmoid()
+        )
+
+        self.pw = nn.Conv2d(channels, channels, kernel_size=1)
+        self.norm = nn.GroupNorm(group_num, channels)
+        self.act = nn.SiLU()
+
+    def forward(self, x):
+        local_feat = self.dw(x)
+        gate = self.spatial_gate(x)
+        out = local_feat * gate
+        out = self.pw(out)
+        out = self.norm(out)
+        out = self.act(out)
+        return out + x
+
+
 class ImprovedSpaMamba(nn.Module):
     def __init__(self, channels, use_residual=True, group_num=4, token_num=4,  num_scales=3, num_layers=2,
                  spatial_mode='baseline'):
@@ -420,14 +451,7 @@ class ImprovedSpaMamba(nn.Module):
         # 添加 SCSA 模块
         self.scsa = SCSA(dim=channels, head_num=4, window_size=7)
 
-        if spatial_mode == 'dwconv_mamba':
-            self.spatial_prior = nn.Sequential(
-                nn.Conv2d(channels, channels, kernel_size=3, padding=1, groups=channels),
-                nn.GroupNorm(group_num, channels),
-                nn.SiLU()
-            )
-        else:
-            self.spatial_prior = nn.Identity()
+        self.spatial_prior = LightSpatialPrior(channels, group_num=group_num)
 
         self.proj = nn.Sequential(
             nn.GroupNorm(group_num, channels),
@@ -435,10 +459,10 @@ class ImprovedSpaMamba(nn.Module):
         )
 
     def forward(self, x):
-        x = self.spatial_prior(x)
+        x_prior = self.spatial_prior(x)
         # 首先应用多尺度卷积
         # x_re = self.multi_scale_conv(x)
-        x_re = self.pyramid_refined_attention(x)
+        x_re = self.pyramid_refined_attention(x_prior)
         # 然后应用 SCSA 模块进行空间-通道自注意力
         # x_re = self.scsa(x)  # Apply SCSA (Spatial-Channel Self Attention)
 
@@ -453,7 +477,7 @@ class ImprovedSpaMamba(nn.Module):
         # 应用最后的投影层
         x_recon = self.proj(x_recon)
 
-        return x_recon + x if self.use_residual else x_recon
+        return x_recon + x_prior if self.use_residual else x_recon
 
 class CollaborativeFusion(nn.Module):
     def __init__(self, channels, reduction=4, group_num=4):
