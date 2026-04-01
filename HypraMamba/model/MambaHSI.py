@@ -455,6 +455,56 @@ class ImprovedSpaMamba(nn.Module):
 
         return x_recon + x if self.use_residual else x_recon
 
+class CollaborativeFusion(nn.Module):
+    def __init__(self, channels, reduction=4, group_num=4):
+        super(CollaborativeFusion, self).__init__()
+        mid = max(channels // reduction, 8)
+
+        self.spatial_mix = nn.Sequential(
+            nn.Conv2d(channels * 2, channels, kernel_size=1),
+            nn.SiLU(),
+            nn.Conv2d(channels, channels * 2, kernel_size=1)
+        )
+
+        self.channel_spa = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(channels, mid, kernel_size=1),
+            nn.SiLU(),
+            nn.Conv2d(mid, channels, kernel_size=1),
+            nn.Sigmoid()
+        )
+
+        self.channel_spe = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(channels, mid, kernel_size=1),
+            nn.SiLU(),
+            nn.Conv2d(mid, channels, kernel_size=1),
+            nn.Sigmoid()
+        )
+
+        self.out_proj = nn.Sequential(
+            nn.Conv2d(channels * 2, channels, kernel_size=1),
+            nn.GroupNorm(group_num, channels),
+            nn.SiLU()
+        )
+
+    def forward(self, spa_x, spe_x, identity):
+        fusion = torch.cat([spa_x, spe_x], dim=1)
+
+        spatial_weights = self.spatial_mix(fusion)
+        w_spa, w_spe = torch.chunk(spatial_weights, 2, dim=1)
+        w_spa = torch.sigmoid(w_spa)
+        w_spe = torch.sigmoid(w_spe)
+
+        spa_s = spa_x + w_spe * spe_x
+        spe_s = spe_x + w_spa * spa_x
+
+        spa_c = spa_s + self.channel_spe(spe_s) * spe_s
+        spe_c = spe_s + self.channel_spa(spa_s) * spa_s
+
+        out = self.out_proj(torch.cat([spa_c, spe_c], dim=1))
+        return out + identity
+
 class ImprovedBothMamba(nn.Module):
     def __init__(self, channels, token_num, use_residual, group_num=4, spatial_mode='baseline'):
         super(ImprovedBothMamba, self).__init__()
@@ -467,31 +517,13 @@ class ImprovedBothMamba(nn.Module):
             spatial_mode=spatial_mode
         )
         self.spe_mamba = ImprovedSpeMamba(channels, token_num=token_num, use_residual=use_residual, group_num=group_num)
-
-        # 学习的注意力权重
-        self.attention = nn.Sequential(
-            nn.Conv2d(2 * channels, channels, kernel_size=1),
-            nn.SiLU(),
-            nn.Conv2d(channels, 1, kernel_size=1),
-            nn.Sigmoid()
-        )
+        self.fusion = CollaborativeFusion(channels, reduction=4, group_num=group_num)
 
     def forward(self, x):
         spa_x = self.spa_mamba(x)
         spe_x = self.spe_mamba(x)
-
-        # 拼接两个特征图来应用注意力
-        fused_input = torch.cat([spa_x, spe_x], dim=1)
-        attention_map = self.attention(fused_input)  # 生成注意力图
-
-        # 对每个特征图应用注意力
-        spa_x_attended = spa_x * attention_map
-        spe_x_attended = spe_x * (1 - attention_map)
-
-        # 融合经过注意力加权的特征
-        fusion_x = spa_x_attended + spe_x_attended
-
-        return fusion_x + x if self.use_residual else fusion_x
+        fusion_x = self.fusion(spa_x, spe_x, x)
+        return fusion_x
 
 class ImprovedMambaHSI(nn.Module):
     def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True, mamba_type='both',
@@ -549,7 +581,6 @@ class ImprovedMambaHSI(nn.Module):
     def forward(self, x):
         x = self.patch_embedding(x)
         x = self.mamba(x)    # 下采样到 H/2, W/2
-        x = self.dynamic_conv(x)
         logits = self.cls_head(x) # [B, num_classes, H/2, W/2]
         # logits = self.upsample(logits) # [B, num_classes, H, W]
         return logits
