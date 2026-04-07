@@ -369,16 +369,16 @@ class ImprovedSpeMamba(nn.Module):
     def forward(self, x):
         # Apply padding to the input if necessary
         x_pad = self.padding_feature(x)
+        # Inject first-order spectral differences before spectral attention.
+        x_diff = torch.diff(x_pad, n=1, dim=1)
+        x_diff = F.pad(x_diff, (0, 0, 0, 0, 0, 1), value=0.0)
+        x_pad = x_pad + x_diff
         # Apply PyramidRefinedChannelAttention directly to the input tensor
         x_re = self.pyramid_refined_attention(x_pad)
 
         # Flatten the input for Mamba
         B, C, H, W = x_re.shape
         x_re_flat = x_re.view(B * H * W, self.token_num, self.group_channel_num)  # Flatten for Mamba
-        # Add first-order spectral differences before Mamba without changing dimensions.
-        x_diff = torch.diff(x_re_flat, n=1, dim=1)
-        x_diff = F.pad(x_diff, (0, 0, 0, 1))
-        x_re_flat = x_re_flat + x_diff
         # Apply Mamba for feature learning
         x_recon = self.mamba(x_re_flat)
 
@@ -542,10 +542,79 @@ class CollaborativeFusion(nn.Module):
         fused = self.out_proj(torch.cat([spa_c, spe_c], dim=1))
         return identity + self.beta * fused
 
+
+class CrossBranchBridge(nn.Module):
+    """
+    Channel-wise gating bridge. No spatial attention, O(C) not O(N^2).
+    """
+    def __init__(self, channels, reduction=4):
+        super(CrossBranchBridge, self).__init__()
+        mid = max(channels // reduction, 4)
+        # spa gated by spe channel descriptor
+        self.gate_spa = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(1),
+            nn.Linear(channels, mid, bias=False),
+            nn.SiLU(),
+            nn.Linear(mid, channels, bias=False),
+            nn.Sigmoid(),
+        )
+        # spe gated by spa channel descriptor
+        self.gate_spe = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(1),
+            nn.Linear(channels, mid, bias=False),
+            nn.SiLU(),
+            nn.Linear(mid, channels, bias=False),
+            nn.Sigmoid(),
+        )
+        self.gamma_spa = nn.Parameter(torch.zeros(1))
+        self.gamma_spe = nn.Parameter(torch.zeros(1))
+
+    def forward(self, spa_feat, spe_feat):
+        # spe tells spa which channels are spectrally informative
+        g_spa = self.gate_spa(spe_feat).unsqueeze(-1).unsqueeze(-1)
+        spa_out = spa_feat + self.gamma_spa * (g_spa * spa_feat)
+
+        # spa tells spe which channels are spatially informative
+        g_spe = self.gate_spe(spa_feat).unsqueeze(-1).unsqueeze(-1)
+        spe_out = spe_feat + self.gamma_spe * (g_spe * spe_feat)
+        return spa_out, spe_out
+
+
+class ChannelInteractionFusion(nn.Module):
+    """
+    Channel-wise adaptive fusion with complementary Softmax weights.
+    Each channel independently decides spa vs spe importance.
+    """
+    def __init__(self, channels):
+        super(ChannelInteractionFusion, self).__init__()
+        self.fc_spa = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(1),
+            nn.Linear(channels, channels, bias=False),
+        )
+        self.fc_spe = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(1),
+            nn.Linear(channels, channels, bias=False),
+        )
+
+    def forward(self, spa_feat, spe_feat):
+        d_spa = self.fc_spa(spa_feat)
+        d_spe = self.fc_spe(spe_feat)
+        gate = torch.softmax(torch.stack([d_spa, d_spe], dim=1), dim=1)
+        w_spa = gate[:, 0].unsqueeze(-1).unsqueeze(-1)
+        w_spe = gate[:, 1].unsqueeze(-1).unsqueeze(-1)
+        return w_spa * spa_feat + w_spe * spe_feat
+
 class ImprovedBothMamba(nn.Module):
-    def __init__(self, channels, token_num, use_residual, group_num=4, spatial_mode='baseline'):
+    def __init__(self, channels, token_num, use_residual, group_num=4, spatial_mode='baseline',
+                 fusion_mode='channel'):
         super(ImprovedBothMamba, self).__init__()
         self.use_residual = use_residual
+        self.fusion_mode = fusion_mode
+        self.use_cross_bridge = fusion_mode == 'channel'
 
         self.spa_mamba = ImprovedSpaMamba(
             channels,
@@ -554,17 +623,31 @@ class ImprovedBothMamba(nn.Module):
             spatial_mode=spatial_mode
         )
         self.spe_mamba = ImprovedSpeMamba(channels, token_num=token_num, use_residual=use_residual, group_num=group_num)
-        self.fusion = CollaborativeFusion(channels, reduction=4, group_num=group_num)
+        if self.use_cross_bridge:
+            self.cross_bridge = CrossBranchBridge(channels, reduction=4)
+
+        if fusion_mode == 'collaborative':
+            self.fusion = CollaborativeFusion(channels, reduction=4, group_num=group_num)
+        elif fusion_mode == 'channel':
+            self.fusion = ChannelInteractionFusion(channels)
+        else:
+            raise ValueError(f'Unsupported fusion_mode: {fusion_mode}')
 
     def forward(self, x):
         spa_x = self.spa_mamba(x)
         spe_x = self.spe_mamba(x)
-        fusion_x = self.fusion(spa_x, spe_x, x)
-        return fusion_x
+        if self.use_cross_bridge:
+            spa_x, spe_x = self.cross_bridge(spa_x, spe_x)
+
+        if self.fusion_mode == 'collaborative':
+            return self.fusion(spa_x, spe_x, x)
+
+        fusion_x = self.fusion(spa_x, spe_x)
+        return fusion_x + x if self.use_residual else fusion_x
 
 class ImprovedMambaHSI(nn.Module):
     def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True, mamba_type='both',
-                 token_num=4, group_num=4, spatial_mode='baseline'):
+                 token_num=4, group_num=4, spatial_mode='baseline', fusion_mode='channel'):
         super(ImprovedMambaHSI, self).__init__()
         self.mamba_type = mamba_type
         mid_channels = max(hidden_dim // 2, group_num)
@@ -601,7 +684,8 @@ class ImprovedMambaHSI(nn.Module):
                     token_num=token_num,
                     use_residual=use_residual,
                     group_num=group_num,
-                    spatial_mode=spatial_mode
+                    spatial_mode=spatial_mode,
+                    fusion_mode=fusion_mode
                 ),
                 nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
             )

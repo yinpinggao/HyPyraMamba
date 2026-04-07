@@ -79,6 +79,7 @@ def get_parser():
     parser.add_argument('--record_computecost', type=bool, default=False)
     parser.add_argument('--label_smoothing', type=float, default=None)
     parser.add_argument('--spatial_mode', type=str, default='auto', choices=['auto', 'baseline', 'dwconv_mamba'])
+    parser.add_argument('--fusion_mode', type=str, default='channel', choices=['collaborative', 'channel'])
     parser.add_argument('--class_weight_mode', type=str, default='auto', choices=['auto', 'none', 'balanced'])
     parser.add_argument('--lambda_recon', type=float, default=0.05)
     parser.add_argument('--recon_loss_type', type=str, default='smoothl1')
@@ -127,6 +128,7 @@ paras_dict = {
     'seed_list': seed_list,
     'label_smoothing': label_smoothing,
     'spatial_mode': spatial_mode,
+    'fusion_mode': args.fusion_mode,
     'class_weight_mode': class_weight_mode,
     'lambda_recon': lambda_recon,
     'recon_loss_type': args.recon_loss_type,
@@ -224,7 +226,8 @@ if __name__ == '__main__':
             in_channels=channels,
             num_classes=class_count,
             hidden_dim=128,
-            spatial_mode=spatial_mode
+            spatial_mode=spatial_mode,
+            fusion_mode=args.fusion_mode
         )
 
         logger.info(paras_dict)
@@ -424,7 +427,8 @@ if __name__ == '__main__':
             in_channels=channels,
             num_classes=class_count,
             hidden_dim=128,
-            spatial_mode=spatial_mode
+            spatial_mode=spatial_mode,
+            fusion_mode=args.fusion_mode
         )
         best_net.to(device)
         best_net.load_state_dict(torch.load(load_weight_path))
