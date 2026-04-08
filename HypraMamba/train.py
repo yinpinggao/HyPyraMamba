@@ -79,7 +79,7 @@ def get_parser():
     parser.add_argument('--record_computecost', type=bool, default=False)
     parser.add_argument('--label_smoothing', type=float, default=None)
     parser.add_argument('--spatial_mode', type=str, default='auto', choices=['auto', 'baseline', 'dwconv_mamba'])
-    parser.add_argument('--fusion_mode', type=str, default='channel', choices=['collaborative', 'channel'])
+    parser.add_argument('--fusion_mode', type=str, default='channel', choices=['collaborative', 'channel', 'ccaf', 'ccaf_v2'])
     parser.add_argument('--class_weight_mode', type=str, default='auto', choices=['auto', 'none', 'balanced'])
     parser.add_argument('--lambda_recon', type=float, default=0.05)
     parser.add_argument('--recon_loss_type', type=str, default='smoothl1')
@@ -148,6 +148,15 @@ def compute_recon_loss(recon_loss_func, recon_pred, target):
     )
     return recon_loss_func(recon_pred_up, target)
 
+
+def get_fusion_status(model, fusion_mode):
+    status = 'Fusion mode: {}'.format(fusion_mode)
+    if fusion_mode in ['ccaf', 'ccaf_v2'] and hasattr(model, 'get_fusion_beta'):
+        beta_value = model.get_fusion_beta()
+        if beta_value is not None:
+            status += '|beta:{:.6f}'.format(beta_value)
+    return status
+
 if __name__ == '__main__':
     data_set_path = args.data_set_path   # ./data
     work_dir = args.work_dir          #./
@@ -156,7 +165,8 @@ if __name__ == '__main__':
     dataset_name = data_set_name # UP 。。。
     exp_name = args.exp_name
 
-    save_folder = os.path.join(work_dir, exp_name, net_name, dataset_name) # './RUNS/MambaHSI/UP'
+    save_net_name = net_name if args.fusion_mode == 'channel' else '{}_{}'.format(net_name, args.fusion_mode)
+    save_folder = os.path.join(work_dir, exp_name, save_net_name, dataset_name) # './RUNS/MambaHSI/UP'
     # 路径不存在创建路径
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
@@ -168,6 +178,7 @@ if __name__ == '__main__':
     logger = setup_logger(name='{}'.format(dataset_name), logfile=save_log_path)
     torch.cuda.empty_cache() # 清理 PyTorch 的 GPU 显存缓存
     logger.info(save_folder)
+    logger.info(get_fusion_status(model=None, fusion_mode=args.fusion_mode))
 
     # Load data and apply preprocessing
     data, gt = data_load_operate.load_data(data_set_name, data_set_path)
@@ -232,6 +243,7 @@ if __name__ == '__main__':
 
         logger.info(paras_dict)
         logger.info(net)
+        logger.info(get_fusion_status(net, args.fusion_mode))
 
         x = transform(np.array(img))
         x = x.unsqueeze(0).float().to(device)
@@ -398,6 +410,7 @@ if __name__ == '__main__':
                 mIOU, IOU = evaluator.Mean_Intersection_over_Union()
                 mAcc, Acc = evaluator.Pixel_Accuracy_Class()
                 Kappa = evaluator.Kappa()
+                logger.info(get_fusion_status(net, args.fusion_mode))
                 logger.info('Evaluate {}|OA:{}|MACC:{}|Kappa:{}|MIOU:{}|IOU:{}|ACC:{}'.format(epoch, OA, mAcc, Kappa, mIOU, IOU, Acc))
 
                 # Save the best model based on validation accuracy
@@ -433,6 +446,7 @@ if __name__ == '__main__':
         best_net.to(device)
         best_net.load_state_dict(torch.load(load_weight_path))
         best_net.eval()
+        logger.info(get_fusion_status(best_net, args.fusion_mode))
 
         test_evaluator = Evaluator(num_class=class_count)
 

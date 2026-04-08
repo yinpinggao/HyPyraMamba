@@ -608,13 +608,120 @@ class ChannelInteractionFusion(nn.Module):
         w_spe = gate[:, 1].unsqueeze(-1).unsqueeze(-1)
         return w_spa * spa_feat + w_spe * spe_feat
 
+
+class ConsensusCompetitiveFusion(nn.Module):
+    """
+    在通道竞争融合上增加共识分支，尽量保持初始行为接近原融合。
+    """
+    def __init__(self, channels, reduction=8):
+        super(ConsensusCompetitiveFusion, self).__init__()
+        hidden = max(channels // reduction, 8)
+        self.fc_spa = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(1),
+            nn.Linear(channels, channels, bias=False),
+        )
+        self.fc_spe = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(1),
+            nn.Linear(channels, channels, bias=False),
+        )
+        self.consensus_gate = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(1),
+            nn.Linear(channels, hidden, bias=False),
+            nn.SiLU(),
+            nn.Linear(hidden, channels, bias=False),
+            nn.Sigmoid(),
+        )
+        # 0 初始化，保证训练初期尽量贴近原竞争融合。
+        self.beta = nn.Parameter(torch.zeros(1))
+
+    def forward(self, spa_feat, spe_feat):
+        assert spa_feat.dim() == 4 and spe_feat.dim() == 4, \
+            'ConsensusCompetitiveFusion expects 4D inputs [B, C, H, W].'
+        assert spa_feat.shape == spe_feat.shape, \
+            'ConsensusCompetitiveFusion requires spa_feat and spe_feat to have identical shapes.'
+
+        spa_logit = self.fc_spa(spa_feat)
+        spe_logit = self.fc_spe(spe_feat)
+        weights = torch.softmax(torch.stack([spa_logit, spe_logit], dim=1), dim=1)
+        w_spa = weights[:, 0, :].unsqueeze(-1).unsqueeze(-1)
+        w_spe = weights[:, 1, :].unsqueeze(-1).unsqueeze(-1)
+
+        common_feat = spa_feat * spe_feat
+        g_cons = self.consensus_gate(common_feat).unsqueeze(-1).unsqueeze(-1)
+
+        competitive = w_spa * spa_feat + w_spe * spe_feat
+        consensus = g_cons * 0.5 * (spa_feat + spe_feat)
+        return competitive + self.beta * consensus
+
+
+class ConflictSuppressedCCAF(nn.Module):
+    """
+    在 CCAF 基础上加入冲突抑制，只在低冲突通道放大共识项。
+    """
+    def __init__(self, channels, reduction=8):
+        super(ConflictSuppressedCCAF, self).__init__()
+        hidden = max(channels // reduction, 8)
+        self.fc_spa = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(1),
+            nn.Linear(channels, channels, bias=False),
+        )
+        self.fc_spe = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(1),
+            nn.Linear(channels, channels, bias=False),
+        )
+        self.consensus_gate = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(1),
+            nn.Linear(channels, hidden, bias=False),
+            nn.SiLU(),
+            nn.Linear(hidden, channels, bias=False),
+            nn.Sigmoid(),
+        )
+        self.conflict_gate = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(1),
+            nn.Linear(channels, hidden, bias=False),
+            nn.SiLU(),
+            nn.Linear(hidden, channels, bias=False),
+            nn.Sigmoid(),
+        )
+        # 0 初始化，保证训练初期尽量贴近原竞争融合。
+        self.beta = nn.Parameter(torch.zeros(1))
+
+    def forward(self, spa_feat, spe_feat):
+        assert spa_feat.dim() == 4 and spe_feat.dim() == 4, \
+            'ConflictSuppressedCCAF expects 4D inputs [B, C, H, W].'
+        assert spa_feat.shape == spe_feat.shape, \
+            'ConflictSuppressedCCAF requires spa_feat and spe_feat to have identical shapes.'
+
+        spa_logit = self.fc_spa(spa_feat)
+        spe_logit = self.fc_spe(spe_feat)
+        weights = torch.softmax(torch.stack([spa_logit, spe_logit], dim=1), dim=1)
+        w_spa = weights[:, 0, :].unsqueeze(-1).unsqueeze(-1)
+        w_spe = weights[:, 1, :].unsqueeze(-1).unsqueeze(-1)
+
+        common_feat = spa_feat * spe_feat
+        g_cons = self.consensus_gate(common_feat).unsqueeze(-1).unsqueeze(-1)
+
+        diff_feat = torch.abs(spa_feat - spe_feat)
+        g_conflict = self.conflict_gate(diff_feat).unsqueeze(-1).unsqueeze(-1)
+
+        competitive = w_spa * spa_feat + w_spe * spe_feat
+        consensus = g_cons * 0.5 * (spa_feat + spe_feat)
+        return competitive + self.beta * consensus * (1 - g_conflict)
+
 class ImprovedBothMamba(nn.Module):
     def __init__(self, channels, token_num, use_residual, group_num=4, spatial_mode='baseline',
                  fusion_mode='channel'):
         super(ImprovedBothMamba, self).__init__()
         self.use_residual = use_residual
         self.fusion_mode = fusion_mode
-        self.use_cross_bridge = fusion_mode == 'channel'
+        self.use_cross_bridge = fusion_mode in ['channel', 'ccaf', 'ccaf_v2']
 
         self.spa_mamba = ImprovedSpaMamba(
             channels,
@@ -630,6 +737,10 @@ class ImprovedBothMamba(nn.Module):
             self.fusion = CollaborativeFusion(channels, reduction=4, group_num=group_num)
         elif fusion_mode == 'channel':
             self.fusion = ChannelInteractionFusion(channels)
+        elif fusion_mode == 'ccaf':
+            self.fusion = ConsensusCompetitiveFusion(channels, reduction=8)
+        elif fusion_mode == 'ccaf_v2':
+            self.fusion = ConflictSuppressedCCAF(channels, reduction=8)
         else:
             raise ValueError(f'Unsupported fusion_mode: {fusion_mode}')
 
@@ -644,6 +755,11 @@ class ImprovedBothMamba(nn.Module):
 
         fusion_x = self.fusion(spa_x, spe_x)
         return fusion_x + x if self.use_residual else fusion_x
+
+    def get_fusion_beta(self):
+        if self.fusion_mode in ['ccaf', 'ccaf_v2'] and hasattr(self.fusion, 'beta'):
+            return self.fusion.beta.detach().item()
+        return None
 
 class ImprovedMambaHSI(nn.Module):
     def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True, mamba_type='both',
@@ -719,5 +835,10 @@ class ImprovedMambaHSI(nn.Module):
             return logits, recon
 
         return logits
+
+    def get_fusion_beta(self):
+        if self.mamba_type == 'both' and len(self.mamba) > 0 and hasattr(self.mamba[0], 'get_fusion_beta'):
+            return self.mamba[0].get_fusion_beta()
+        return None
 
 
