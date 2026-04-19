@@ -1,140 +1,10 @@
 import math
 import torch
-from torch import nn
-from mamba_ssm import Mamba
-from torch.cuda.amp import autocast
 import torch.nn.functional as F
+from torch import nn
 from einops import rearrange
-import typing as t
-from torch import nn, einsum
+from mamba_ssm import Mamba
 
-class SCSA(nn.Module):
-    def __init__(self,
-                 dim: int,
-                 head_num: int,
-                 window_size: int = 7,
-                 group_kernel_sizes: t.List[int] = [3, 5, 7, 9],
-                 qkv_bias: bool = False,
-                 fuse_bn: bool = False,
-                 down_sample_mode: str = 'avg_pool',
-                 attn_drop_ratio: float = 0.,
-                 gate_layer: str = 'sigmoid',
-                 ):
-        super(SCSA, self).__init__()
-
-        self.dim = dim
-        self.head_num = head_num
-        self.head_dim = dim // head_num
-        self.scaler = self.head_dim ** -0.5
-        self.group_kernel_sizes = group_kernel_sizes
-        self.window_size = window_size
-        self.qkv_bias = qkv_bias
-        self.fuse_bn = fuse_bn
-        self.down_sample_mode = down_sample_mode
-
-        assert self.dim % 4 == 0, 'The dimension of input feature should be divisible by 4.'
-        self.group_chans = self.dim // 4
-
-        # 局部和全局深度卷积层
-        self.local_dwc = nn.Conv1d(self.group_chans, self.group_chans, kernel_size=self.group_kernel_sizes[0],
-                                   padding=self.group_kernel_sizes[0] // 2, groups=self.group_chans)
-        self.global_dwcs = nn.ModuleList([
-            nn.Conv1d(self.group_chans, self.group_chans, kernel_size=size, padding=size // 2, groups=self.group_chans)
-            for size in self.group_kernel_sizes[1:]
-        ])
-
-        # 注意力门控层
-        self.sa_gate = nn.Softmax(dim=2) if gate_layer == 'softmax' else nn.Sigmoid()
-        self.norm_h = nn.GroupNorm(4, dim)
-        self.norm_w = nn.GroupNorm(4, dim)
-        self.conv_d = nn.Identity()
-        self.norm = nn.GroupNorm(1, dim)
-
-        # 查询、键、值卷积层
-        self.q = nn.Conv2d(in_channels=dim, out_channels=dim, kernel_size=1, bias=qkv_bias, groups=dim)
-        self.k = nn.Conv2d(in_channels=dim, out_channels=dim, kernel_size=1, bias=qkv_bias, groups=dim)
-        self.v = nn.Conv2d(in_channels=dim, out_channels=dim, kernel_size=1, bias=qkv_bias, groups=dim)
-        self.attn_drop = nn.Dropout(attn_drop_ratio)
-        self.ca_gate = nn.Softmax(dim=1) if gate_layer == 'softmax' else nn.Sigmoid()
-
-        # 根据窗口大小和下采样模式选择下采样函数
-        if window_size == -1:
-            self.down_func = nn.AdaptiveAvgPool2d((1, 1))
-        else:
-            if down_sample_mode == 'recombination':
-                self.down_func = self.space_to_chans
-                self.conv_d = nn.Conv2d(in_channels=dim * window_size ** 2, out_channels=dim, kernel_size=1, bias=False)
-            elif down_sample_mode == 'avg_pool':
-                self.down_func = nn.AvgPool2d(kernel_size=(window_size, window_size), stride=window_size)
-            elif down_sample_mode == 'max_pool':
-                self.down_func = nn.MaxPool2d(kernel_size=(window_size, window_size), stride=window_size)
-
-    def conv_group(self, x, kernel_size: int) -> torch.Tensor:
-        """
-        简化卷积操作
-        """
-        return nn.Conv1d(x.size(1), x.size(1), kernel_size=kernel_size, padding=kernel_size // 2, groups=x.size(1))(x)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        b, c, h_, w_ = x.size()
-
-        # 计算水平和垂直方向的特征
-        x_h = x.mean(dim=3)
-        l_x_h, g_x_h_s, g_x_h_m, g_x_h_l = torch.split(x_h, self.group_chans, dim=1)
-        x_w = x.mean(dim=2)
-        l_x_w, g_x_w_s, g_x_w_m, g_x_w_l = torch.split(x_w, self.group_chans, dim=1)
-
-        # 计算水平注意力
-        x_h_attn = self.sa_gate(self.norm_h(torch.cat((
-            self.local_dwc(l_x_h),
-            *[gw(l_x_h) for gw in self.global_dwcs]
-        ), dim=1)))
-        x_h_attn = x_h_attn.view(b, c, h_, 1)
-
-        # 计算垂直注意力
-        x_w_attn = self.sa_gate(self.norm_w(torch.cat((
-            self.local_dwc(l_x_w),
-            *[gw(l_x_w) for gw in self.global_dwcs]
-        ), dim=1)))
-        x_w_attn = x_w_attn.view(b, c, 1, w_)
-
-        # 计算最终的加权结果
-        x = x * x_h_attn * x_w_attn
-
-        # 通道自注意力
-        y = self.down_func(x)
-        y = self.conv_d(y)
-        _, _, h_, w_ = y.size()
-
-        # 计算查询、键、值
-        y = self.norm(y)
-        q = self.q(y)
-        k = self.k(y)
-        v = self.v(y)
-
-        # 调整维度以进行注意力计算
-        q = rearrange(q, 'b (head_num head_dim) h w -> b head_num head_dim (h w)', head_num=self.head_num,
-                      head_dim=self.head_dim)
-        k = rearrange(k, 'b (head_num head_dim) h w -> b head_num head_dim (h w)', head_num=self.head_num,
-                      head_dim=self.head_dim)
-        v = rearrange(v, 'b (head_num head_dim) h w -> b head_num head_dim (h w)', head_num=self.head_num,
-                      head_dim=self.head_dim)
-
-        # 计算注意力
-        attn = q @ k.transpose(-2, -1) * self.scaler
-        attn = self.attn_drop(attn.softmax(dim=-1))
-
-        # 加权值
-        attn = attn @ v
-        attn = rearrange(attn, 'b head_num head_dim (h w) -> b (head_num head_dim) h w', h=h_, w=w_)
-
-        # 计算通道注意力
-        attn = attn.mean((2, 3), keepdim=True)
-        attn = self.ca_gate(attn)
-
-        return attn * x
-
-# Pyramid Attention module, which computes attention across spatial dimensions
 class PyramidAttention(nn.Module):
     def __init__(self, dim, num_heads, bias):
         super(PyramidAttention, self).__init__()
@@ -183,15 +53,9 @@ class PyramidAttention(nn.Module):
 
         return out
 
-
-# GCSA module with Pyramid-Refined Channel Attention (PRCA)
 class PyramidRefinedChannelAttention(nn.Module):
     def __init__(self, dim, num_heads, bias, num_scales=3, num_layers=2):
         super(PyramidRefinedChannelAttention, self).__init__()
-
-        # Store the number of heads and initialize the temperature for attention scaling
-        self.num_heads = num_heads
-        self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
 
         # Create PyramidAttention modules for different scales dynamically
         self.attention_modules = nn.ModuleList([
@@ -239,94 +103,6 @@ class PyramidRefinedChannelAttention(nn.Module):
         out = self.project_out(out)
 
         return out
-
-
-
-class MultiScaleConv(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(MultiScaleConv, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(in_channels, out_channels, kernel_size=5, padding=2)
-        self.conv3 = nn.Conv2d(in_channels, out_channels, kernel_size=7, padding=3)
-        self.conv4 = nn.Conv2d(in_channels, out_channels, kernel_size=1)
-        self.final_conv = nn.Conv2d(out_channels * 4, out_channels, kernel_size=1)
-        self.norm = nn.GroupNorm(1, out_channels)
-        self.activation = nn.ReLU()
-        self.attention = ChannelAttention(out_channels)  # Add attention here
-
-    def forward(self, x):
-        out1 = self.conv1(x)
-        out2 = self.conv2(x)
-        out3 = self.conv3(x)
-        out4 = self.conv4(x)
-        out = torch.cat((out1, out2, out3, out4), dim=1)
-        out = self.final_conv(out)
-        out = self.norm(out)
-        out = self.activation(out)
-        return self.attention(out)
-
-
-class DynamicConvBlock(nn.Module):
-    def __init__(self, channels, kernel_size=3, num_experts=4, reduction=4, dropout=0.1):
-        super(DynamicConvBlock, self).__init__()
-        self.channels = channels
-        self.num_experts = num_experts
-        self.kernel_size = kernel_size
-
-        # Generate dynamic weights using a lightweight attention mechanism
-        self.attention = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(channels, channels // reduction, kernel_size=1),
-            nn.ReLU(),
-            nn.Conv2d(channels // reduction, num_experts, kernel_size=1),
-            nn.Softmax(dim=1)
-        )
-
-        # Define a set of expert convolutions
-        self.convs = nn.ModuleList([
-            nn.Conv2d(channels, channels, kernel_size=kernel_size, padding=kernel_size // 2, groups=channels)
-            for _ in range(num_experts)
-        ])
-
-        self.norm = nn.GroupNorm(1, channels)
-        self.dropout = nn.Dropout(dropout)
-        self.activation = nn.SiLU()
-
-    def forward(self, x):
-        B, C, H, W = x.shape
-
-        # Get the attention weights for each expert
-        attention_weights = self.attention(x).view(B, self.num_experts, 1, 1, 1)
-
-        # Apply each expert convolution
-        outputs = [conv(x).unsqueeze(1) for conv in self.convs]
-        outputs = torch.cat(outputs, dim=1)  # Shape: (B, num_experts, C, H, W)
-
-        # Weighted sum of the outputs from experts
-        x = (outputs * attention_weights).sum(dim=1)
-        x = self.norm(x)
-        x = self.activation(x)
-        x = self.dropout(x)
-        return x
-
-
-class ChannelAttention(nn.Module):
-    def __init__(self, in_channels, reduction=16):
-        super(ChannelAttention, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc1 = nn.Conv2d(in_channels, in_channels // reduction, 1, bias=False)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Conv2d(in_channels // reduction, in_channels, 1, bias=False)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        y = self.avg_pool(x)
-        y = self.fc1(y)
-        y = self.relu(y)
-        y = self.fc2(y)
-        return x * self.sigmoid(y)
-
-
 class ImprovedSpeMamba(nn.Module):
     def __init__(self, channels, token_num=4, use_residual=True, group_num=4, num_scales=3, num_layers=2):
         super(ImprovedSpeMamba, self).__init__()
@@ -421,19 +197,69 @@ class LightSpatialPrior(nn.Module):
         return out + x
 
 
+def _consume_removed_spatial_init_rng(channels):
+    """
+    Preserve the pre-cleanup parameter-init RNG sequence.
+
+    These layers were removed from the forward graph, but their original
+    constructors consumed random numbers during weight initialization. This
+    project trains from scratch, so deleting those constructors changed the
+    initial weights of later live modules under the same seed and caused metric
+    drift. We instantiate the removed layers locally, then discard them
+    immediately, so:
+    1. they do not become part of the model/state_dict,
+    2. they do not run in forward,
+    3. later live layers still see the same RNG state as before cleanup.
+    """
+    out_channels = channels
+    reduction = 16
+    window_size = 7
+    group_kernel_sizes = [3, 5, 7, 9]
+    group_chans = channels // 4
+
+    multi_scale_conv = nn.Sequential(
+        nn.Conv2d(channels, out_channels, kernel_size=3, padding=1),
+        nn.Conv2d(channels, out_channels, kernel_size=5, padding=2),
+        nn.Conv2d(channels, out_channels, kernel_size=7, padding=3),
+        nn.Conv2d(channels, out_channels, kernel_size=1),
+        nn.Conv2d(out_channels * 4, out_channels, kernel_size=1),
+        nn.GroupNorm(1, out_channels),
+        nn.ReLU(),
+        nn.AdaptiveAvgPool2d(1),
+        nn.Conv2d(out_channels, out_channels // reduction, kernel_size=1, bias=False),
+        nn.ReLU(),
+        nn.Conv2d(out_channels // reduction, out_channels, kernel_size=1, bias=False),
+        nn.Sigmoid(),
+    )
+
+    scsa = nn.ModuleList([
+        nn.Conv1d(group_chans, group_chans, kernel_size=group_kernel_sizes[0], padding=group_kernel_sizes[0] // 2, groups=group_chans),
+        nn.ModuleList([
+            nn.Conv1d(group_chans, group_chans, kernel_size=size, padding=size // 2, groups=group_chans)
+            for size in group_kernel_sizes[1:]
+        ]),
+        nn.GroupNorm(4, channels),
+        nn.GroupNorm(4, channels),
+        nn.GroupNorm(1, channels),
+        nn.Conv2d(channels, channels, kernel_size=1, bias=False, groups=channels),
+        nn.Conv2d(channels, channels, kernel_size=1, bias=False, groups=channels),
+        nn.Conv2d(channels, channels, kernel_size=1, bias=False, groups=channels),
+        nn.AvgPool2d(kernel_size=(window_size, window_size), stride=window_size),
+    ])
+
+    del multi_scale_conv, scsa
+
+
 class ImprovedSpaMamba(nn.Module):
-    def __init__(self, channels, use_residual=True, group_num=4, token_num=4,  num_scales=3, num_layers=2,
-                 spatial_mode='baseline'):
+    def __init__(self, channels, use_residual=True, group_num=4, token_num=4, num_scales=3, num_layers=2):
         super(ImprovedSpaMamba, self).__init__()
         self.use_residual = use_residual
         self.token_num = token_num
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
-        self.spatial_mode = spatial_mode
-        # Initialize PyramidRefinedChannelAttention
         self.pyramid_refined_attention = PyramidRefinedChannelAttention(
-            dim=self.channel_num,  # Apply attention on channel_num
-            num_heads=4,  # You can adjust num_heads as per your requirements
+            dim=self.channel_num,
+            num_heads=4,
             bias=True,
             num_scales=num_scales,
             num_layers=num_layers
@@ -446,11 +272,8 @@ class ImprovedSpaMamba(nn.Module):
             expand=2,
         )
 
-        self.multi_scale_conv = MultiScaleConv(channels, channels)
-
-        # 添加 SCSA 模块
-        self.scsa = SCSA(dim=channels, head_num=4, window_size=7)
-
+        # Keep init order numerically aligned with the pre-cleanup model.
+        _consume_removed_spatial_init_rng(channels)
         self.spatial_prior = LightSpatialPrior(channels, group_num=group_num)
 
         self.proj = nn.Sequential(
@@ -460,87 +283,15 @@ class ImprovedSpaMamba(nn.Module):
 
     def forward(self, x):
         x_prior = self.spatial_prior(x)
-        # 首先应用多尺度卷积
-        # x_re = self.multi_scale_conv(x)
         x_re = self.pyramid_refined_attention(x_prior)
-        # 然后应用 SCSA 模块进行空间-通道自注意力
-        # x_re = self.scsa(x)  # Apply SCSA (Spatial-Channel Self Attention)
-
-        # 将数据展平并通过 Mamba
         B, C, H, W = x_re.shape
         x_flat = x_re.permute(0, 2, 3, 1).reshape(B, H * W, C)
         x_flat = self.mamba(x_flat)
 
-        # 重塑回原始形状
         x_recon = x_flat.reshape(B, H, W, C).permute(0, 3, 1, 2)
-
-        # 应用最后的投影层
         x_recon = self.proj(x_recon)
 
         return x_recon + x_prior if self.use_residual else x_recon
-
-class CollaborativeFusion(nn.Module):
-    def __init__(self, channels, reduction=4, group_num=4):
-        super(CollaborativeFusion, self).__init__()
-        mid = max(channels // reduction, 8)
-
-        self.norm_spa = nn.GroupNorm(group_num, channels)
-        self.norm_spe = nn.GroupNorm(group_num, channels)
-
-        self.alpha = nn.Parameter(torch.tensor(0.1))
-        self.gamma = nn.Parameter(torch.tensor(0.1))
-        self.beta = nn.Parameter(torch.tensor(0.1))
-
-        self.spatial_mix = nn.Sequential(
-            nn.Conv2d(channels * 2, channels, kernel_size=1),
-            nn.SiLU(),
-            nn.Conv2d(channels, channels * 2, kernel_size=1)
-        )
-
-        self.channel_spa = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(channels, mid, kernel_size=1),
-            nn.SiLU(),
-            nn.Conv2d(mid, channels, kernel_size=1),
-            nn.Sigmoid()
-        )
-
-        self.channel_spe = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(channels, mid, kernel_size=1),
-            nn.SiLU(),
-            nn.Conv2d(mid, channels, kernel_size=1),
-            nn.Sigmoid()
-        )
-
-        self.out_proj = nn.Sequential(
-            nn.Conv2d(channels * 2, channels, kernel_size=1),
-            nn.GroupNorm(group_num, channels),
-            nn.SiLU()
-        )
-
-    def forward(self, spa_x, spe_x, identity):
-        spa_n = self.norm_spa(spa_x)
-        spe_n = self.norm_spe(spe_x)
-
-        fusion = torch.cat([spa_n, spe_n], dim=1)
-
-        spatial_weights = self.spatial_mix(fusion)
-        w_spa, w_spe = torch.chunk(spatial_weights, 2, dim=1)
-        w_spa = torch.sigmoid(w_spa)
-        w_spe = torch.sigmoid(w_spe)
-
-        spa_s = spa_x + self.alpha * (w_spe * spe_n)
-        spe_s = spe_x + self.alpha * (w_spa * spa_n)
-
-        spa_gate = self.channel_spe(spe_s)
-        spe_gate = self.channel_spa(spa_s)
-
-        spa_c = spa_s + self.gamma * (spa_gate * spe_s)
-        spe_c = spe_s + self.gamma * (spe_gate * spa_s)
-
-        fused = self.out_proj(torch.cat([spa_c, spe_c], dim=1))
-        return identity + self.beta * fused
 
 
 class CrossBranchBridge(nn.Module):
@@ -580,83 +331,6 @@ class CrossBranchBridge(nn.Module):
         g_spe = self.gate_spe(spa_feat).unsqueeze(-1).unsqueeze(-1)
         spe_out = spe_feat + self.gamma_spe * (g_spe * spe_feat)
         return spa_out, spe_out
-
-
-class ChannelInteractionFusion(nn.Module):
-    """
-    Channel-wise adaptive fusion with complementary Softmax weights.
-    Each channel independently decides spa vs spe importance.
-    """
-    def __init__(self, channels):
-        super(ChannelInteractionFusion, self).__init__()
-        self.fc_spa = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(1),
-            nn.Linear(channels, channels, bias=False),
-        )
-        self.fc_spe = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(1),
-            nn.Linear(channels, channels, bias=False),
-        )
-
-    def forward(self, spa_feat, spe_feat):
-        d_spa = self.fc_spa(spa_feat)
-        d_spe = self.fc_spe(spe_feat)
-        gate = torch.softmax(torch.stack([d_spa, d_spe], dim=1), dim=1)
-        w_spa = gate[:, 0].unsqueeze(-1).unsqueeze(-1)
-        w_spe = gate[:, 1].unsqueeze(-1).unsqueeze(-1)
-        return w_spa * spa_feat + w_spe * spe_feat
-
-
-class ConsensusCompetitiveFusion(nn.Module):
-    """
-    在通道竞争融合上增加共识分支，尽量保持初始行为接近原融合。
-    """
-    def __init__(self, channels, reduction=8):
-        super(ConsensusCompetitiveFusion, self).__init__()
-        hidden = max(channels // reduction, 8)
-        self.fc_spa = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(1),
-            nn.Linear(channels, channels, bias=False),
-        )
-        self.fc_spe = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(1),
-            nn.Linear(channels, channels, bias=False),
-        )
-        self.consensus_gate = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(1),
-            nn.Linear(channels, hidden, bias=False),
-            nn.SiLU(),
-            nn.Linear(hidden, channels, bias=False),
-            nn.Sigmoid(),
-        )
-        # 0 初始化，保证训练初期尽量贴近原竞争融合。
-        self.beta = nn.Parameter(torch.zeros(1))
-
-    def forward(self, spa_feat, spe_feat):
-        assert spa_feat.dim() == 4 and spe_feat.dim() == 4, \
-            'ConsensusCompetitiveFusion expects 4D inputs [B, C, H, W].'
-        assert spa_feat.shape == spe_feat.shape, \
-            'ConsensusCompetitiveFusion requires spa_feat and spe_feat to have identical shapes.'
-
-        spa_logit = self.fc_spa(spa_feat)
-        spe_logit = self.fc_spe(spe_feat)
-        weights = torch.softmax(torch.stack([spa_logit, spe_logit], dim=1), dim=1)
-        w_spa = weights[:, 0, :].unsqueeze(-1).unsqueeze(-1)
-        w_spe = weights[:, 1, :].unsqueeze(-1).unsqueeze(-1)
-
-        common_feat = spa_feat * spe_feat
-        g_cons = self.consensus_gate(common_feat).unsqueeze(-1).unsqueeze(-1)
-
-        competitive = w_spa * spa_feat + w_spe * spe_feat
-        consensus = g_cons * 0.5 * (spa_feat + spe_feat)
-        return competitive + self.beta * consensus
-
-
 class ConflictSuppressedCCAF(nn.Module):
     """
     在 CCAF 基础上加入冲突抑制，只在低冲突通道放大共识项。
@@ -716,100 +390,54 @@ class ConflictSuppressedCCAF(nn.Module):
         return competitive + self.beta * consensus * (1 - g_conflict)
 
 class ImprovedBothMamba(nn.Module):
-    def __init__(self, channels, token_num, use_residual, group_num=4, spatial_mode='baseline',
-                 fusion_mode='channel'):
+    def __init__(self, channels, token_num, use_residual, group_num=4):
         super(ImprovedBothMamba, self).__init__()
         self.use_residual = use_residual
-        self.fusion_mode = fusion_mode
-        self.use_cross_bridge = fusion_mode in ['channel', 'ccaf', 'ccaf_v2']
-
         self.spa_mamba = ImprovedSpaMamba(
             channels,
             use_residual=use_residual,
             group_num=group_num,
-            spatial_mode=spatial_mode
         )
         self.spe_mamba = ImprovedSpeMamba(channels, token_num=token_num, use_residual=use_residual, group_num=group_num)
-        if self.use_cross_bridge:
-            self.cross_bridge = CrossBranchBridge(channels, reduction=4)
-
-        if fusion_mode == 'collaborative':
-            self.fusion = CollaborativeFusion(channels, reduction=4, group_num=group_num)
-        elif fusion_mode == 'channel':
-            self.fusion = ChannelInteractionFusion(channels)
-        elif fusion_mode == 'ccaf':
-            self.fusion = ConsensusCompetitiveFusion(channels, reduction=8)
-        elif fusion_mode == 'ccaf_v2':
-            self.fusion = ConflictSuppressedCCAF(channels, reduction=8)
-        else:
-            raise ValueError(f'Unsupported fusion_mode: {fusion_mode}')
+        self.cross_bridge = CrossBranchBridge(channels, reduction=4)
+        self.fusion = ConflictSuppressedCCAF(channels, reduction=8)
 
     def forward(self, x):
         spa_x = self.spa_mamba(x)
         spe_x = self.spe_mamba(x)
-        if self.use_cross_bridge:
-            spa_x, spe_x = self.cross_bridge(spa_x, spe_x)
-
-        if self.fusion_mode == 'collaborative':
-            return self.fusion(spa_x, spe_x, x)
-
+        spa_x, spe_x = self.cross_bridge(spa_x, spe_x)
         fusion_x = self.fusion(spa_x, spe_x)
         return fusion_x + x if self.use_residual else fusion_x
 
     def get_fusion_beta(self):
-        if self.fusion_mode in ['ccaf', 'ccaf_v2'] and hasattr(self.fusion, 'beta'):
+        if hasattr(self.fusion, 'beta'):
             return self.fusion.beta.detach().item()
         return None
 
 class ImprovedMambaHSI(nn.Module):
-    def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True, mamba_type='both',
-                 token_num=4, group_num=4, spatial_mode='baseline', fusion_mode='channel'):
+    def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True,
+                 token_num=4, group_num=4):
         super(ImprovedMambaHSI, self).__init__()
-        self.mamba_type = mamba_type
         mid_channels = max(hidden_dim // 2, group_num)
         if mid_channels % group_num != 0:
             mid_channels += group_num - mid_channels % group_num
 
-        # Patch Embedding Layer
         self.patch_embedding = nn.Sequential(
             nn.Conv2d(in_channels=in_channels, out_channels=hidden_dim, kernel_size=1, stride=1, padding=0),
             nn.GroupNorm(group_num, hidden_dim),
             nn.SiLU()
         )
 
-        # Choose between different Mamba modules
-        if mamba_type == 'spa':
-            self.mamba = nn.Sequential(
-                ImprovedSpaMamba(
-                    hidden_dim,
-                    use_residual=use_residual,
-                    group_num=group_num,
-                    spatial_mode=spatial_mode
-                ),
-                nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
-            )
-        elif mamba_type == 'spe':
-            self.mamba = nn.Sequential(
-                ImprovedSpeMamba(hidden_dim, token_num=token_num, use_residual=use_residual, group_num=group_num),
-                nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
-            )
-        elif mamba_type == 'both':
-            self.mamba = nn.Sequential(
-                ImprovedBothMamba(
-                    hidden_dim,
-                    token_num=token_num,
-                    use_residual=use_residual,
-                    group_num=group_num,
-                    spatial_mode=spatial_mode,
-                    fusion_mode=fusion_mode
-                ),
-                nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
-            )
+        self.mamba = nn.Sequential(
+            ImprovedBothMamba(
+                hidden_dim,
+                token_num=token_num,
+                use_residual=use_residual,
+                group_num=group_num,
+            ),
+            nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
+        )
 
-        # Ablation: remove DynamicConvBlock while keeping the rest unchanged.
-        self.dynamic_conv = nn.Identity()
-
-        # Classification head
         self.cls_head = nn.Sequential(
             nn.Conv2d(in_channels=hidden_dim, out_channels=128, kernel_size=1, stride=1, padding=0),
             nn.GroupNorm(group_num, 128),
@@ -822,13 +450,11 @@ class ImprovedMambaHSI(nn.Module):
             nn.SiLU(),
             nn.Conv2d(mid_channels, in_channels, kernel_size=1, stride=1, padding=0)
         )
-        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
 
     def forward(self, x, return_aux=False):
         x = self.patch_embedding(x)
-        x_feat = self.mamba(x)    # 下采样到 H/2, W/2
-        logits = self.cls_head(x_feat) # [B, num_classes, H/2, W/2]
-        # logits = self.upsample(logits) # [B, num_classes, H, W]
+        x_feat = self.mamba(x)
+        logits = self.cls_head(x_feat)
 
         if return_aux:
             recon = self.recon_head(x_feat)
@@ -837,8 +463,6 @@ class ImprovedMambaHSI(nn.Module):
         return logits
 
     def get_fusion_beta(self):
-        if self.mamba_type == 'both' and len(self.mamba) > 0 and hasattr(self.mamba[0], 'get_fusion_beta'):
+        if len(self.mamba) > 0 and hasattr(self.mamba[0], 'get_fusion_beta'):
             return self.mamba[0].get_fusion_beta()
         return None
-
-

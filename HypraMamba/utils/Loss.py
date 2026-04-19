@@ -24,12 +24,11 @@ def resize(input,
     return F.interpolate(input, size, scale_factor, mode, align_corners)
 
 
-def head_loss(loss_func,logits,label,align_corners=True):
+def head_loss(loss_func, logits, label, align_corners=True):
     seg_logits = resize(
         input=logits,
         size=label.shape[1:],
         mode='bilinear',
         align_corners=align_corners)
-    print('seg_logits:',seg_logits.shape)
-    loss = loss_func(seg_logits,label)
+    loss = loss_func(seg_logits, label)
     return loss

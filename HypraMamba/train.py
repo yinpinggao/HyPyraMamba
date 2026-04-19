@@ -1,40 +1,25 @@
-import sys
 import os
-# sys.path.append('/content/drive/MyDrive/hyperspectral classification/MambaHSI')
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-#os.environ['CUDA_VISIBLE_DEVICES']='0' #选择服务器
 import time
-import torch
 import random
 import argparse
 import numpy as np
-from torchvision import models, transforms
-# import matplotlib.pyplot as plt
-# from visual.visualize_map import DrawResult
+import torch
 import utils.data_load_operate as data_load_operate
 from utils.Loss import head_loss, resize
 from utils.evaluation import Evaluator
-from utils.HSICommonUtils import normlize3D, ImageStretching
+from utils.HSICommonUtils import ImageStretching
 from utils.setup_logger import setup_logger
 from utils.visual_predict import visualize_predict
-from PIL import Image
 from model.MambaHSI import ImprovedMambaHSI as MambaHSI
 from calflops import calculate_flops
 from sklearn.decomposition import PCA
 from scipy.ndimage import gaussian_filter
 from torch.cuda.amp import autocast, GradScaler
 from torchvision import transforms
-import torch
 
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:64,garbage_collection_threshold:0.6'
-torch.autograd.set_detect_anomaly(True)
-
-scaler = GradScaler()
-
-accumulation_steps = 4
-
-# 返回当前本地时间 '24-11-28-15.23'
-time_current = time.strftime("%y-%m-%d-%H.%M", time.localtime())
+scaler = GradScaler(enabled=torch.cuda.is_available())
+FUSION_NAME = 'ccaf_v2'
 
 
 def vis_a_image(gt_vis, pred_vis, save_single_predict_path, save_single_gt_path, only_vis_label=False):
@@ -65,7 +50,6 @@ def compute_balanced_class_weights(train_label, class_count, target_device):
     return class_weights.to(target_device), class_counts.long().tolist()
 
 def get_parser():
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_index', type=int, default=8)
     parser.add_argument('--data_set_path', type=str, default='./data')
@@ -78,8 +62,6 @@ def get_parser():
     parser.add_argument('--exp_name', type=str, default='RUNS')
     parser.add_argument('--record_computecost', type=bool, default=False)
     parser.add_argument('--label_smoothing', type=float, default=None)
-    parser.add_argument('--spatial_mode', type=str, default='auto', choices=['auto', 'baseline', 'dwconv_mamba'])
-    parser.add_argument('--fusion_mode', type=str, default='channel', choices=['collaborative', 'channel', 'ccaf', 'ccaf_v2'])
     parser.add_argument('--class_weight_mode', type=str, default='auto', choices=['auto', 'none', 'balanced'])
     parser.add_argument('--lambda_recon', type=float, default=0.05)
     parser.add_argument('--recon_loss_type', type=str, default='smoothl1')
@@ -91,16 +73,14 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 args \
     = get_parser()
 record_computecost = args.record_computecost
-exp_name = args.exp_name
-#seed_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 seed_list = [0, 1, 2]
-num_list = [args.train_samples, args.val_samples] # 用于存储训练样本数和验证样本数
+num_list = [args.train_samples, args.val_samples]
 
-dataset_index = args.dataset_index # 选择的数据集索引（如 0、1、2 等），通过索引选择不同的数据集。
+dataset_index = args.dataset_index
 max_epoch = args.max_epoch
 learning_rate = args.lr
 lambda_recon = args.lambda_recon
-net_name = 'MambaHSI'
+save_net_name = 'MambaHSI_{}'.format(FUSION_NAME)
 data_set_name_list = ['UP', 'HanChuan', 'HongHu', 'Houston','LongKou','Salinas','indian','Botswana','XuZhou','Pavia']
 data_set_name = data_set_name_list[dataset_index]
 split_image = data_set_name in ['HanChuan', 'Houston','Pavia']
@@ -110,25 +90,19 @@ if args.label_smoothing is None:
 else:
     label_smoothing = args.label_smoothing
 
-if args.spatial_mode == 'auto':
-    spatial_mode = 'dwconv_mamba' if data_set_name in ['LongKou', 'XuZhou'] else 'baseline'
-else:
-    spatial_mode = args.spatial_mode
-
 if args.class_weight_mode == 'auto':
     class_weight_mode = 'balanced' if data_set_name == 'indian' else 'none'
 else:
     class_weight_mode = args.class_weight_mode
 
 paras_dict = {
-    'net_name': net_name,
+    'net_name': save_net_name,
     'dataset_index': dataset_index,
     'num_list': num_list,
     'lr': learning_rate,
     'seed_list': seed_list,
     'label_smoothing': label_smoothing,
-    'spatial_mode': spatial_mode,
-    'fusion_mode': args.fusion_mode,
+    'fusion_mode': FUSION_NAME,
     'class_weight_mode': class_weight_mode,
     'lambda_recon': lambda_recon,
     'recon_loss_type': args.recon_loss_type,
@@ -149,56 +123,45 @@ def compute_recon_loss(recon_loss_func, recon_pred, target):
     return recon_loss_func(recon_pred_up, target)
 
 
-def get_fusion_status(model, fusion_mode):
-    status = 'Fusion mode: {}'.format(fusion_mode)
-    if fusion_mode in ['ccaf', 'ccaf_v2'] and hasattr(model, 'get_fusion_beta'):
+def get_fusion_status(model):
+    status = 'Fusion mode: {}'.format(FUSION_NAME)
+    if model is not None and hasattr(model, 'get_fusion_beta'):
         beta_value = model.get_fusion_beta()
         if beta_value is not None:
             status += '|beta:{:.6f}'.format(beta_value)
     return status
 
 if __name__ == '__main__':
-    data_set_path = args.data_set_path   # ./data
-    work_dir = args.work_dir          #./
-    # tr30val10_lr0.0003
-    setting_name = 'tr{}val{}'.format(str(args.train_samples), str(args.val_samples)) + '_lr{}'.format(str(learning_rate))
-    dataset_name = data_set_name # UP 。。。
-    exp_name = args.exp_name
+    data_set_path = args.data_set_path
+    work_dir = args.work_dir
+    dataset_name = data_set_name
 
-    save_net_name = net_name if args.fusion_mode == 'channel' else '{}_{}'.format(net_name, args.fusion_mode)
-    save_folder = os.path.join(work_dir, exp_name, save_net_name, dataset_name) # './RUNS/MambaHSI/UP'
-    # 路径不存在创建路径
+    save_folder = os.path.join(work_dir, args.exp_name, save_net_name, dataset_name)
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
         print("makedirs {}".format(save_folder))
 
     save_log_path = os.path.join(save_folder, 'train_tr{}_val{}.log'.format(num_list[0], num_list[1]))
-    # './RUNS/MambaHSI/UP/train_tr30_val10.log'
 
     logger = setup_logger(name='{}'.format(dataset_name), logfile=save_log_path)
-    torch.cuda.empty_cache() # 清理 PyTorch 的 GPU 显存缓存
+    torch.cuda.empty_cache()
     logger.info(save_folder)
-    logger.info(get_fusion_status(model=None, fusion_mode=args.fusion_mode))
+    logger.info(get_fusion_status(model=None))
 
-    # Load data and apply preprocessing
     data, gt = data_load_operate.load_data(data_set_name, data_set_path)
 
-    # Apply Gaussian filtering
     data_filtered = gaussian_filter(data, sigma=1)
 
-    # Apply PCA for dimensionality reduction
     pca = PCA(n_components=30)
     data_reshaped = data_filtered.reshape(-1, data_filtered.shape[2])
     data_pca = pca.fit_transform(data_reshaped)
     data_pca = data_pca.reshape(data_filtered.shape[0], data_filtered.shape[1], -1)
 
-    # Update data shape and other parameters based on PCA-preprocessed data
     height, width, channels = data_pca.shape
     gt_reshape = gt.reshape(-1)
     img = ImageStretching(data_pca)
     class_count = int(max(np.unique(gt)))
 
-    flag_list = [1, 0]  # ratio or num
     ratio_list = [0.1, 0.01]  # [train_ratio, val_ratio]
 
     OA_ALL = []
@@ -207,18 +170,16 @@ if __name__ == '__main__':
     EACH_ACC_ALL = []
     Train_Time_ALL = []
     Test_Time_ALL = []
-    CLASS_ACC = np.zeros([len(seed_list), class_count])
     evaluator = Evaluator(num_class=class_count)
 
     for exp_idx, curr_seed in enumerate(seed_list):
         setup_seed(curr_seed)
 
-        # 创建实验结果保存目录
-        single_experiment_name = 'run{}_seed{}'.format(str(exp_idx), str(curr_seed)) # run0_seed0
-        save_single_experiment_folder = os.path.join(save_folder, single_experiment_name) # # './RUNS/MambaHSI/UP/run0_seed0'
+        single_experiment_name = 'run{}_seed{}'.format(str(exp_idx), str(curr_seed))
+        save_single_experiment_folder = os.path.join(save_folder, single_experiment_name)
         if not os.path.exists(save_single_experiment_folder):
             os.mkdir(save_single_experiment_folder)
-        save_vis_folder = os.path.join(save_single_experiment_folder, 'vis') # './RUNS/MambaHSI/UP/run0_seed0/vis'
+        save_vis_folder = os.path.join(save_single_experiment_folder, 'vis')
         if not os.path.exists(save_vis_folder):
             os.makedirs(save_vis_folder)
             print("makedirs {}".format(save_vis_folder))
@@ -228,26 +189,28 @@ if __name__ == '__main__':
         predict_save_path = os.path.join(save_single_experiment_folder, 'pred_vis_tr{}_val{}.png'.format(num_list[0], num_list[1]))
         gt_save_path = os.path.join(save_single_experiment_folder, 'gt_vis_tr{}_val{}.png'.format(num_list[0], num_list[1]))
 
-        train_data_index, val_data_index, test_data_index, all_data_index = data_load_operate.sampling(ratio_list, num_list, gt_reshape, class_count, flag_list[0])
+        train_data_index, val_data_index, test_data_index, _ = data_load_operate.sampling(
+            ratio_list,
+            num_list,
+            gt_reshape,
+            class_count,
+            1,
+        )
         index = (train_data_index, val_data_index, test_data_index)
-        train_label, val_label, test_label = data_load_operate.generate_image_iter(data_pca, height, width, gt_reshape, index)
+        train_label, val_label, test_label = data_load_operate.generate_image_iter(height, width, gt_reshape, index)
 
-        # build Model  单GPU
         net = MambaHSI(
             in_channels=channels,
             num_classes=class_count,
             hidden_dim=128,
-            spatial_mode=spatial_mode,
-            fusion_mode=args.fusion_mode
         )
 
         logger.info(paras_dict)
         logger.info(net)
-        logger.info(get_fusion_status(net, args.fusion_mode))
+        logger.info(get_fusion_status(net))
 
         x = transform(np.array(img))
         x = x.unsqueeze(0).float().to(device)
-        print(f"x shape: {x.shape}")
 
         if class_weight_mode == 'balanced':
             class_weights, class_counts = compute_balanced_class_weights(train_label, class_count, device)
@@ -272,15 +235,9 @@ if __name__ == '__main__':
 
         net.to(device)
 
-        train_loss_list = [100]
-        train_acc_list = [0]
-        val_loss_list = [100]
-        val_acc_list = [0]
-
         optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate, weight_decay=1e-5)
 
         logger.info(optimizer)
-        best_loss = 99999
         if record_computecost:
             net.eval()
             torch.cuda.empty_cache()
@@ -292,11 +249,7 @@ if __name__ == '__main__':
         tic1 = time.perf_counter()
         best_val_acc = 0
         for epoch in range(max_epoch):
-            y_train = train_label.unsqueeze(0) # 将 train_label 数据的维度增加一个轴，通常是因为模型期望输入的是一个 4D 张量 (batch_size, channels, height, width)，而 train_label 可能是 3D 的。
-            train_acc_sum, trained_samples_counter = 0.0, 0
-            batch_counter, train_loss_sum = 0, 0
-            time_epoch = time.time()
-            loss_dict = {}
+            y_train = train_label.unsqueeze(0)
 
             net.train()
 
@@ -338,12 +291,11 @@ if __name__ == '__main__':
 
             else:
                 try:
-                    # autocast()：这个上下文管理器启用混合精度训练，它可以减少计算时间并减少显存占用。scaler 用于处理梯度缩放，使得反向传播时能更稳定。
-                    with autocast():
-                         y_pred, recon_pred = net(x, return_aux=True)
-                         cls_loss = head_loss(loss_func, y_pred, y_train.long())
-                         recon_loss = compute_recon_loss(recon_loss_func, recon_pred, x)
-                         ls = cls_loss + lambda_recon * recon_loss
+                    with autocast(enabled=device.type == 'cuda'):
+                        y_pred, recon_pred = net(x, return_aux=True)
+                        cls_loss = head_loss(loss_func, y_pred, y_train.long())
+                        recon_loss = compute_recon_loss(recon_loss_func, recon_pred, x)
+                        ls = cls_loss + lambda_recon * recon_loss
                     optimizer.zero_grad()
                     scaler.scale(ls).backward()
                     scaler.step(optimizer)
@@ -358,8 +310,7 @@ if __name__ == '__main__':
                         )
                     )
 
-                # except 处理：如果内存不足或计算出现问题（比如 OOM 错误），会切换为 split_image = True，重新将图像切分为两部分并训练。这是一个容错机制，防止内存不足导致训练崩溃。
-                except:
+                except RuntimeError:
                     optimizer.zero_grad()
                     torch.cuda.empty_cache()
                     split_image = True
@@ -399,10 +350,10 @@ if __name__ == '__main__':
             net.eval()
             with torch.no_grad():
                 evaluator.reset()
-                output_val = net(x) # 使用验证数据进行前向传播。
+                output_val = net(x)
                 y_val = val_label.unsqueeze(0)
                 seg_logits = resize(input=output_val, size=y_val.shape[1:], mode='bilinear', align_corners=True)
-                predict = torch.argmax(seg_logits, dim=1).cpu().numpy() # 将模型输出的 logits 转换为类别标签
+                predict = torch.argmax(seg_logits, dim=1).cpu().numpy()
                 Y_val_np = val_label.cpu().numpy()
                 Y_val_255 = np.where(Y_val_np == -1, 255, Y_val_np)
                 evaluator.add_batch(np.expand_dims(Y_val_255, axis=0), predict)
@@ -410,12 +361,10 @@ if __name__ == '__main__':
                 mIOU, IOU = evaluator.Mean_Intersection_over_Union()
                 mAcc, Acc = evaluator.Pixel_Accuracy_Class()
                 Kappa = evaluator.Kappa()
-                logger.info(get_fusion_status(net, args.fusion_mode))
+                logger.info(get_fusion_status(net))
                 logger.info('Evaluate {}|OA:{}|MACC:{}|Kappa:{}|MIOU:{}|IOU:{}|ACC:{}'.format(epoch, OA, mAcc, Kappa, mIOU, IOU, Acc))
 
-                # Save the best model based on validation accuracy
                 if OA >= best_val_acc:
-                    best_epoch = epoch + 1
                     best_val_acc = OA
                     torch.save(net.state_dict(), save_weight_path)
 
@@ -429,24 +378,19 @@ if __name__ == '__main__':
         train_time = toc1 - tic1  # 计算时间间隔
         logger.info(f"train_time: {train_time} seconds")
 
-        # Final testing phase with the best model
         logger.info("\n\n====================Starting evaluation for testing set.========================\n")
         tic2 = time.perf_counter()
-        pred_test = []
 
         load_weight_path = save_weight_path
-        net.update_params = None
         best_net = MambaHSI(
             in_channels=channels,
             num_classes=class_count,
             hidden_dim=128,
-            spatial_mode=spatial_mode,
-            fusion_mode=args.fusion_mode
         )
         best_net.to(device)
         best_net.load_state_dict(torch.load(load_weight_path))
         best_net.eval()
-        logger.info(get_fusion_status(best_net, args.fusion_mode))
+        logger.info(get_fusion_status(best_net))
 
         test_evaluator = Evaluator(num_class=class_count)
 
@@ -469,8 +413,6 @@ if __name__ == '__main__':
         toc2 = time.perf_counter()  # 记录结束时间
         test_time = toc2 - tic2
 
-        # Save results to file
-        f = open(results_save_path, 'a+')
         str_results = '\n======================' \
                       + " exp_idx=" + str(exp_idx) \
                       + " seed=" + str(curr_seed) \
@@ -486,8 +428,8 @@ if __name__ == '__main__':
                       + "\nIOU_test:" + str(IOU_test) \
                       + "\nAcc_test:" + str(Acc_test) + "\n"
         logger.info(str_results)
-        f.write(str_results)
-        f.close()
+        with open(results_save_path, 'a+') as f:
+            f.write(str_results)
 
         OA_ALL.append(OA_test)
         AA_ALL.append(mAcc_test)
@@ -497,7 +439,7 @@ if __name__ == '__main__':
         Test_Time_ALL.append(test_time)
 
         torch.cuda.empty_cache()
-            # Summarize the results across all runs
+
     OA_ALL = np.array(OA_ALL)
     AA_ALL = np.array(AA_ALL)
     KPP_ALL = np.array(KPP_ALL)
@@ -518,27 +460,23 @@ if __name__ == '__main__':
         np.round(np.mean(EACH_ACC_ALL, 0) * 100, decimals=2).tolist(),
         np.round(np.std(EACH_ACC_ALL, 0) * 100, decimals=2).tolist()
     ))
-    # 检查训练时间和测试时间数组是否为空
     if len(Train_Time_ALL) > 0:
         avg_train_time = np.mean(Train_Time_ALL)
         std_train_time = np.std(Train_Time_ALL)
     else:
-        avg_train_time, std_train_time = 0, 0  # 默认值
+        avg_train_time, std_train_time = 0, 0
         logger.warning("Train_Time_ALL 为空，训练时间无法计算，使用默认值 0。")
 
     if len(Test_Time_ALL) > 0:
         avg_test_time = np.mean(Test_Time_ALL) * 1000
         std_test_time = np.std(Test_Time_ALL) * 1000
     else:
-        avg_test_time, std_test_time = 0, 0  # 默认值
+        avg_test_time, std_test_time = 0, 0
         logger.warning("Test_Time_ALL 为空，测试时间无法计算，使用默认值 0。")
 
-    # 日志记录
     logger.info('Average training time: {:.2f} ± {:.3f}'.format(avg_train_time, std_train_time))
     logger.info('Average testing time: {:.2f} ± {:.3f}'.format(avg_test_time, std_test_time))
-    ##############################
 
-    # Save final summary results
     mean_result_path = os.path.join(save_folder, 'mean_result.txt')
     with open(mean_result_path, 'w') as f:
         str_results = '\n\n***************Mean result of ' + str(len(seed_list)) + ' times runs ********************' \
@@ -558,12 +496,4 @@ if __name__ == '__main__':
 
     del net
 
-# Optional cleanup
 torch.cuda.empty_cache()
-
-
-
-
-
-
-
