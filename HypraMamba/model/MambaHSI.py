@@ -154,12 +154,15 @@ class ImprovedSpeMamba(nn.Module):
 
         # Flatten the input for Mamba
         B, C, H, W = x_re.shape
+        assert C == self.channel_num, f"Expected {self.channel_num} channels, got {C}"
+        x_re = x_re.permute(0, 2, 3, 1).contiguous()
         x_re_flat = x_re.view(B * H * W, self.token_num, self.group_channel_num)  # Flatten for Mamba
         # Apply Mamba for feature learning
         x_recon = self.mamba(x_re_flat)
 
         # Reshape back to original dimensions
-        x_recon = x_recon.view(B, C, H, W)
+        x_recon = x_recon.view(B, H, W, C)
+        x_recon = x_recon.permute(0, 3, 1, 2).contiguous()
         # Apply the final projection to map the feature map to the output space
         x_recon = self.proj(x_recon)
         # If residual connection is enabled, add the input to the output
