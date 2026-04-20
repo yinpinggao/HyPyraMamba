@@ -17,3 +17,4 @@ result_*.txt
 # 忽略数据集目录
 data/
 datasets/
+*.txt

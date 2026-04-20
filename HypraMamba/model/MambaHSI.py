@@ -103,6 +103,94 @@ class PyramidRefinedChannelAttention(nn.Module):
         out = self.project_out(out)
 
         return out
+
+
+class ChannelCalibration2D(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int, groups: int = 4):
+        super(ChannelCalibration2D, self).__init__()
+        if out_channels % groups != 0:
+            raise ValueError('out_channels must be divisible by groups in ChannelCalibration2D.')
+
+        self.in_channels = in_channels
+        self.groups = groups
+        self.target_in = math.ceil(in_channels / groups) * groups
+
+        self.proj = nn.Sequential(
+            nn.Conv2d(self.target_in, out_channels, kernel_size=1, groups=groups, bias=False),
+            nn.GroupNorm(groups, out_channels),
+            nn.SiLU()
+        )
+
+    def _build_reflect_indices(self, pad_left: int, pad_right: int, device: torch.device) -> torch.Tensor:
+        if self.in_channels == 1:
+            total = self.in_channels + pad_left + pad_right
+            return torch.zeros(total, dtype=torch.long, device=device)
+
+        positions = torch.arange(-pad_left, self.in_channels + pad_right, device=device)
+        period = 2 * self.in_channels - 2
+        positions = torch.remainder(positions, period)
+        return torch.where(positions < self.in_channels, positions, period - positions).long()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.size(1) != self.in_channels:
+            raise ValueError(
+                f'ChannelCalibration2D expects {self.in_channels} input channels, got {x.size(1)}.'
+            )
+
+        if self.target_in > self.in_channels:
+            pad_c = self.target_in - self.in_channels
+            pad_left = pad_c // 2
+            pad_right = pad_c - pad_left
+            mirror_idx = self._build_reflect_indices(pad_left, pad_right, x.device)
+            x = x.index_select(1, mirror_idx)
+
+        return self.proj(x)
+
+
+class InputSpectralPrior(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        hidden_dim: int,
+        groups: int = 4,
+        calib_channels: int = 64,
+    ):
+        super(InputSpectralPrior, self).__init__()
+        calib_channels = math.ceil(calib_channels / groups) * groups
+        gate_hidden = max(calib_channels // 2, groups)
+        if gate_hidden % groups != 0:
+            gate_hidden += groups - gate_hidden % groups
+
+        self.calibration = ChannelCalibration2D(
+            in_channels=in_channels,
+            out_channels=calib_channels,
+            groups=groups,
+        )
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        self.gate = nn.Sequential(
+            nn.Conv2d(calib_channels * 2, gate_hidden, kernel_size=1, bias=False),
+            nn.GroupNorm(groups, gate_hidden),
+            nn.SiLU(),
+            nn.Conv2d(gate_hidden, calib_channels, kernel_size=1, bias=False),
+            nn.Sigmoid(),
+        )
+        self.project = nn.Sequential(
+            nn.Conv2d(calib_channels, hidden_dim, kernel_size=1, bias=False),
+            nn.GroupNorm(groups, hidden_dim),
+            nn.SiLU()
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # v1 stays at input level only. Dense-SSC is intentionally excluded here
+        # because the current model is full-image, while Dense-SSC is patch-oriented.
+        feat = self.calibration(x)
+        pooled = torch.cat([self.avg_pool(feat), self.max_pool(feat)], dim=1)
+        gate = self.gate(pooled)
+        feat = feat + feat * gate
+        return self.project(feat)
+
+
 class ImprovedSpeMamba(nn.Module):
     def __init__(self, channels, token_num=4, use_residual=True, group_num=4, num_scales=3, num_layers=2):
         super(ImprovedSpeMamba, self).__init__()
@@ -431,6 +519,21 @@ class ImprovedMambaHSI(nn.Module):
             nn.SiLU()
         )
 
+        self.input_prior = InputSpectralPrior(
+            in_channels=in_channels,
+            hidden_dim=hidden_dim,
+            groups=group_num,
+            calib_channels=mid_channels,
+        )
+        self.prior_gate = nn.Sequential(
+            nn.Conv2d(hidden_dim, hidden_dim, kernel_size=1, bias=False),
+            nn.GroupNorm(group_num, hidden_dim),
+            nn.Sigmoid(),
+        )
+        # Zero init keeps the default path aligned with the old model at startup.
+        # The prior is injected only when training finds it useful.
+        self.prior_gamma = nn.Parameter(torch.zeros(1))
+
         self.mamba = nn.Sequential(
             ImprovedBothMamba(
                 hidden_dim,
@@ -455,7 +558,11 @@ class ImprovedMambaHSI(nn.Module):
         )
 
     def forward(self, x, return_aux=False):
+        x_in = x
         x = self.patch_embedding(x)
+        x_prior = self.input_prior(x_in)
+        x = x + self.prior_gamma * (x * self.prior_gate(x_prior))
+
         x_feat = self.mamba(x)
         logits = self.cls_head(x_feat)
 
@@ -469,3 +576,6 @@ class ImprovedMambaHSI(nn.Module):
         if len(self.mamba) > 0 and hasattr(self.mamba[0], 'get_fusion_beta'):
             return self.mamba[0].get_fusion_beta()
         return None
+
+    def get_input_prior_gamma(self):
+        return self.prior_gamma.detach().item()
