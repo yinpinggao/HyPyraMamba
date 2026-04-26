@@ -65,6 +65,7 @@ def get_parser():
     parser.add_argument('--class_weight_mode', type=str, default='auto', choices=['auto', 'none', 'balanced'])
     parser.add_argument('--lambda_recon', type=float, default=0.05)
     parser.add_argument('--recon_loss_type', type=str, default='smoothl1')
+    parser.add_argument('--output_stride', type=int, default=1)
 
     args = parser.parse_args()
     return args
@@ -74,6 +75,7 @@ args \
     = get_parser()
 record_computecost = args.record_computecost
 seed_list = [0, 1, 2]
+#seed_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 num_list = [args.train_samples, args.val_samples]
 
 dataset_index = args.dataset_index
@@ -106,6 +108,7 @@ paras_dict = {
     'class_weight_mode': class_weight_mode,
     'lambda_recon': lambda_recon,
     'recon_loss_type': args.recon_loss_type,
+    'output_stride': args.output_stride,
 }
 
 transform = transforms.Compose([
@@ -203,6 +206,7 @@ if __name__ == '__main__':
             in_channels=channels,
             num_classes=class_count,
             hidden_dim=128,
+            output_stride=args.output_stride,
         )
 
         logger.info(paras_dict)
@@ -386,6 +390,7 @@ if __name__ == '__main__':
             in_channels=channels,
             num_classes=class_count,
             hidden_dim=128,
+            output_stride=args.output_stride,
         )
         best_net.to(device)
         best_net.load_state_dict(torch.load(load_weight_path))

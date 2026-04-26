@@ -106,11 +106,13 @@ class PyramidRefinedChannelAttention(nn.Module):
 class ImprovedSpeMamba(nn.Module):
     def __init__(self, channels, token_num=4, use_residual=True, group_num=4, num_scales=3, num_layers=2):
         super(ImprovedSpeMamba, self).__init__()
+        self.orig_channels = channels
         self.token_num = token_num
         self.use_residual = use_residual
         # Set group_channel_num based on token_num and channels
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
+        assert self.token_num * self.group_channel_num == self.channel_num
         # Initialize PyramidRefinedChannelAttention
         self.pyramid_refined_attention = PyramidRefinedChannelAttention(
             dim=self.channel_num,  # Apply attention on channel_num
@@ -134,13 +136,14 @@ class ImprovedSpeMamba(nn.Module):
 
     def padding_feature(self, x):
         B, C, H, W = x.shape
+        assert C == self.orig_channels, \
+            f'ImprovedSpeMamba expected {self.orig_channels} channels, got {C}.'
         if C < self.channel_num:
             pad_c = self.channel_num - C
-            pad_features = torch.zeros((B, pad_c, H, W)).to(x.device)
+            pad_features = x.new_zeros((B, pad_c, H, W))
             cat_features = torch.cat([x, pad_features], dim=1)
             return cat_features
-        else:
-            return x
+        return x
 
     def forward(self, x):
         # Apply padding to the input if necessary
@@ -152,16 +155,24 @@ class ImprovedSpeMamba(nn.Module):
         # Apply PyramidRefinedChannelAttention directly to the input tensor
         x_re = self.pyramid_refined_attention(x_pad)
 
-        # Flatten the input for Mamba
         B, C, H, W = x_re.shape
-        x_re_flat = x_re.view(B * H * W, self.token_num, self.group_channel_num)  # Flatten for Mamba
+        assert C == self.channel_num, \
+            f'Expected attention output with {self.channel_num} channels, got {C}.'
+        assert self.token_num * self.group_channel_num == self.channel_num
+
+        # Treat each spatial pixel as one spectral grouped-token sequence.
+        x_re = x_re.permute(0, 2, 3, 1).contiguous()
+        x_re_flat = x_re.view(B * H * W, self.token_num, self.group_channel_num)
         # Apply Mamba for feature learning
         x_recon = self.mamba(x_re_flat)
 
         # Reshape back to original dimensions
-        x_recon = x_recon.view(B, C, H, W)
+        x_recon = x_recon.view(B, H, W, self.channel_num)
+        x_recon = x_recon.permute(0, 3, 1, 2).contiguous()
         # Apply the final projection to map the feature map to the output space
         x_recon = self.proj(x_recon)
+        if self.channel_num > self.orig_channels:
+            x_recon = x_recon[:, :self.orig_channels, :, :]
         # If residual connection is enabled, add the input to the output
         return x_recon + x if self.use_residual else x_recon
 
@@ -416,8 +427,15 @@ class ImprovedBothMamba(nn.Module):
 
 class ImprovedMambaHSI(nn.Module):
     def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True,
-                 token_num=4, group_num=4):
+                 token_num=4, group_num=4, output_stride=1):
         super(ImprovedMambaHSI, self).__init__()
+        if output_stride == 1:
+            self.downsample = nn.Identity()
+        elif output_stride == 2:
+            self.downsample = nn.AvgPool2d(kernel_size=2, stride=2)
+        else:
+            raise ValueError('output_stride must be 1 or 2.')
+
         mid_channels = max(hidden_dim // 2, group_num)
         if mid_channels % group_num != 0:
             mid_channels += group_num - mid_channels % group_num
@@ -428,14 +446,11 @@ class ImprovedMambaHSI(nn.Module):
             nn.SiLU()
         )
 
-        self.mamba = nn.Sequential(
-            ImprovedBothMamba(
-                hidden_dim,
-                token_num=token_num,
-                use_residual=use_residual,
-                group_num=group_num,
-            ),
-            nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
+        self.backbone = ImprovedBothMamba(
+            hidden_dim,
+            token_num=token_num,
+            use_residual=use_residual,
+            group_num=group_num,
         )
 
         self.cls_head = nn.Sequential(
@@ -453,7 +468,8 @@ class ImprovedMambaHSI(nn.Module):
 
     def forward(self, x, return_aux=False):
         x = self.patch_embedding(x)
-        x_feat = self.mamba(x)
+        x = self.backbone(x)
+        x_feat = self.downsample(x)
         logits = self.cls_head(x_feat)
 
         if return_aux:
@@ -463,6 +479,6 @@ class ImprovedMambaHSI(nn.Module):
         return logits
 
     def get_fusion_beta(self):
-        if len(self.mamba) > 0 and hasattr(self.mamba[0], 'get_fusion_beta'):
-            return self.mamba[0].get_fusion_beta()
+        if hasattr(self.backbone, 'get_fusion_beta'):
+            return self.backbone.get_fusion_beta()
         return None
