@@ -5,19 +5,55 @@ from torch import nn
 from einops import rearrange
 from mamba_ssm import Mamba
 
+
+def _normalize_dilations(dilation):
+    if isinstance(dilation, str):
+        dilations = tuple(int(value.strip()) for value in dilation.split(',') if value.strip())
+    elif isinstance(dilation, int):
+        dilations = (dilation,)
+    else:
+        dilations = tuple(int(value) for value in dilation)
+
+    if len(dilations) == 0:
+        raise ValueError('dilation must contain at least one value.')
+    if any(value < 1 for value in dilations):
+        raise ValueError('all dilation values must be positive integers.')
+
+    return dilations
+
+
 class PyramidAttention(nn.Module):
-    def __init__(self, dim, num_heads, bias):
+    def __init__(self, dim, num_heads, bias, dilation=2):
         super(PyramidAttention, self).__init__()
         # Number of attention heads
         self.num_heads = num_heads
+        self.dilations = _normalize_dilations(dilation)
         # Temperature parameter for scaling the attention
         self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
 
         # Query, Key, Value (QKV) convolution to generate attention-related features
         self.qkv = nn.Conv2d(dim, dim * 3, kernel_size=1, bias=bias)
         # Depthwise separable convolution for better performance
-        self.qkv_dwconv = nn.Conv2d(dim * 3, dim * 3, kernel_size=3, stride=1, dilation=2, padding=2, groups=dim * 3,
-                                    bias=bias)
+        self.qkv_dwconvs = nn.ModuleList([
+            nn.Conv2d(
+                dim * 3,
+                dim * 3,
+                kernel_size=3,
+                stride=1,
+                dilation=value,
+                padding=value,
+                groups=dim * 3,
+                bias=bias
+            )
+            for value in self.dilations
+        ])
+        if len(self.dilations) > 1:
+            dilation_logits = torch.zeros(len(self.dilations), dtype=torch.float32)
+            preferred_index = self.dilations.index(3) if 3 in self.dilations else len(self.dilations) - 1
+            dilation_logits[preferred_index] = 2.0
+            self.dilation_logits = nn.Parameter(dilation_logits)
+        else:
+            self.register_parameter('dilation_logits', None)
         # Output projection layer after attention calculation
         self.project_out = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
 
@@ -25,7 +61,15 @@ class PyramidAttention(nn.Module):
         b, c, h, w = x.shape
 
         # Compute QKV using the 1x1 convolution and depthwise convolution
-        qkv = self.qkv_dwconv(self.qkv(x))
+        qkv_base = self.qkv(x)
+        if self.dilation_logits is None:
+            qkv = self.qkv_dwconvs[0](qkv_base)
+        else:
+            weights = torch.softmax(self.dilation_logits, dim=0)
+            qkv = None
+            for weight, qkv_dwconv in zip(weights, self.qkv_dwconvs):
+                branch_qkv = weight * qkv_dwconv(qkv_base)
+                qkv = branch_qkv if qkv is None else qkv + branch_qkv
         # Split QKV into query, key, and value
         q, k, v = qkv.chunk(3, dim=1)
 
@@ -54,17 +98,17 @@ class PyramidAttention(nn.Module):
         return out
 
 class PyramidRefinedChannelAttention(nn.Module):
-    def __init__(self, dim, num_heads, bias, num_scales=3, num_layers=2):
+    def __init__(self, dim, num_heads, bias, num_scales=3, num_layers=2, dilation=2):
         super(PyramidRefinedChannelAttention, self).__init__()
 
         # Create PyramidAttention modules for different scales dynamically
         self.attention_modules = nn.ModuleList([
-            PyramidAttention(dim, num_heads, bias) for _ in range(num_scales)
+            PyramidAttention(dim, num_heads, bias, dilation=dilation) for _ in range(num_scales)
         ])
 
         # Create a set of layers for refining channel-wise attention for each scale
         self.attention_layers = nn.ModuleList([
-            nn.ModuleList([PyramidAttention(dim, num_heads, bias) for _ in range(num_layers)])
+            nn.ModuleList([PyramidAttention(dim, num_heads, bias, dilation=dilation) for _ in range(num_layers)])
             for _ in range(num_scales)
         ])
 
@@ -104,7 +148,8 @@ class PyramidRefinedChannelAttention(nn.Module):
 
         return out
 class ImprovedSpeMamba(nn.Module):
-    def __init__(self, channels, token_num=4, use_residual=True, group_num=4, num_scales=3, num_layers=2):
+    def __init__(self, channels, token_num=4, use_residual=True, group_num=4, num_scales=3, num_layers=2,
+                 pyramid_dilation=2):
         super(ImprovedSpeMamba, self).__init__()
         self.token_num = token_num
         self.use_residual = use_residual
@@ -117,7 +162,8 @@ class ImprovedSpeMamba(nn.Module):
             num_heads=4,  # You can adjust num_heads as per your requirements
             bias=True,
             num_scales=num_scales,
-            num_layers=num_layers
+            num_layers=num_layers,
+            dilation=pyramid_dilation
         )
         # Initialize Mamba module for feature learning
         self.mamba = Mamba(
@@ -251,7 +297,8 @@ def _consume_removed_spatial_init_rng(channels):
 
 
 class ImprovedSpaMamba(nn.Module):
-    def __init__(self, channels, use_residual=True, group_num=4, token_num=4, num_scales=3, num_layers=2):
+    def __init__(self, channels, use_residual=True, group_num=4, token_num=4, num_scales=3, num_layers=2,
+                 pyramid_dilation=2):
         super(ImprovedSpaMamba, self).__init__()
         self.use_residual = use_residual
         self.token_num = token_num
@@ -262,7 +309,8 @@ class ImprovedSpaMamba(nn.Module):
             num_heads=4,
             bias=True,
             num_scales=num_scales,
-            num_layers=num_layers
+            num_layers=num_layers,
+            dilation=pyramid_dilation
         )
 
         self.mamba = Mamba(
@@ -390,15 +438,22 @@ class ConflictSuppressedCCAF(nn.Module):
         return competitive + self.beta * consensus * (1 - g_conflict)
 
 class ImprovedBothMamba(nn.Module):
-    def __init__(self, channels, token_num, use_residual, group_num=4):
+    def __init__(self, channels, token_num, use_residual, group_num=4, pyramid_dilation=2):
         super(ImprovedBothMamba, self).__init__()
         self.use_residual = use_residual
         self.spa_mamba = ImprovedSpaMamba(
             channels,
             use_residual=use_residual,
             group_num=group_num,
+            pyramid_dilation=pyramid_dilation,
         )
-        self.spe_mamba = ImprovedSpeMamba(channels, token_num=token_num, use_residual=use_residual, group_num=group_num)
+        self.spe_mamba = ImprovedSpeMamba(
+            channels,
+            token_num=token_num,
+            use_residual=use_residual,
+            group_num=group_num,
+            pyramid_dilation=pyramid_dilation,
+        )
         self.cross_bridge = CrossBranchBridge(channels, reduction=4)
         self.fusion = ConflictSuppressedCCAF(channels, reduction=8)
 
@@ -416,7 +471,7 @@ class ImprovedBothMamba(nn.Module):
 
 class ImprovedMambaHSI(nn.Module):
     def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True,
-                 token_num=4, group_num=4):
+                 token_num=4, group_num=4, pyramid_dilation=(2, 3)):
         super(ImprovedMambaHSI, self).__init__()
         mid_channels = max(hidden_dim // 2, group_num)
         if mid_channels % group_num != 0:
@@ -434,6 +489,7 @@ class ImprovedMambaHSI(nn.Module):
                 token_num=token_num,
                 use_residual=use_residual,
                 group_num=group_num,
+                pyramid_dilation=pyramid_dilation,
             ),
             nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
         )

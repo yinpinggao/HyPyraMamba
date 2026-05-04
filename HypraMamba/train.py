@@ -65,6 +65,7 @@ def get_parser():
     parser.add_argument('--class_weight_mode', type=str, default='auto', choices=['auto', 'none', 'balanced'])
     parser.add_argument('--lambda_recon', type=float, default=0.05)
     parser.add_argument('--recon_loss_type', type=str, default='smoothl1')
+    parser.add_argument('--pyramid_dilation', type=str, default='3')
 
     args = parser.parse_args()
     return args
@@ -73,13 +74,15 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 args \
     = get_parser()
 record_computecost = args.record_computecost
-seed_list = [0, 1, 2]
+#seed_list = [0, 1, 2]
+seed_list = [0, 1, 2, 3, 4]
 num_list = [args.train_samples, args.val_samples]
 
 dataset_index = args.dataset_index
 max_epoch = args.max_epoch
 learning_rate = args.lr
 lambda_recon = args.lambda_recon
+pyramid_dilation = args.pyramid_dilation
 save_net_name = 'MambaHSI_{}'.format(FUSION_NAME)
 data_set_name_list = ['UP', 'HanChuan', 'HongHu', 'Houston','LongKou','Salinas','indian','Botswana','XuZhou','Pavia']
 data_set_name = data_set_name_list[dataset_index]
@@ -106,6 +109,7 @@ paras_dict = {
     'class_weight_mode': class_weight_mode,
     'lambda_recon': lambda_recon,
     'recon_loss_type': args.recon_loss_type,
+    'pyramid_dilation': pyramid_dilation,
 }
 
 transform = transforms.Compose([
@@ -203,6 +207,7 @@ if __name__ == '__main__':
             in_channels=channels,
             num_classes=class_count,
             hidden_dim=128,
+            pyramid_dilation=pyramid_dilation,
         )
 
         logger.info(paras_dict)
@@ -386,6 +391,7 @@ if __name__ == '__main__':
             in_channels=channels,
             num_classes=class_count,
             hidden_dim=128,
+            pyramid_dilation=pyramid_dilation,
         )
         best_net.to(device)
         best_net.load_state_dict(torch.load(load_weight_path))
