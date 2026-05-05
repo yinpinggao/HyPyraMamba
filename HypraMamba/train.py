@@ -56,12 +56,12 @@ def get_parser():
     parser.add_argument('--work_dir', type=str, default='./')
 
     parser.add_argument('--lr', type=float, default=0.0003)
-    parser.add_argument('--max_epoch', type=int, default=200)
+    parser.add_argument('--max_epoch', type=int, default=300)
     parser.add_argument('--train_samples', type=int, default=30)
     parser.add_argument('--val_samples', type=int, default=10)
     parser.add_argument('--exp_name', type=str, default='RUNS')
     parser.add_argument('--record_computecost', type=bool, default=False)
-    parser.add_argument('--label_smoothing', type=float, default=None)
+    parser.add_argument('--label_smoothing', type=float, default=0.05)
     parser.add_argument('--class_weight_mode', type=str, default='auto', choices=['auto', 'none', 'balanced'])
     parser.add_argument('--lambda_recon', type=float, default=0.05)
     parser.add_argument('--recon_loss_type', type=str, default='smoothl1')
@@ -74,8 +74,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 args \
     = get_parser()
 record_computecost = args.record_computecost
-#seed_list = [0, 1, 2]
-seed_list = [0, 1, 2, 3, 4]
+#seed_list = [0, 1, 2, 3]
+seed_list = [0, 1, 2, 3, 4, 5 , 6, 7, 8, 9]
 num_list = [args.train_samples, args.val_samples]
 
 dataset_index = args.dataset_index
