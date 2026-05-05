@@ -6,6 +6,26 @@ from einops import rearrange
 from mamba_ssm import Mamba
 
 
+VALID_ABLATIONS = {
+    'full',
+    'wo_lpps',
+    'wo_dgs',
+    'wo_lsp',
+    'wo_diff',
+    'wo_prca',
+    'wo_bcb',
+    'c3_add',
+    'wo_recon',
+}
+C3_ACTIVE_ABLATIONS = {'full', 'wo_lsp', 'wo_diff', 'wo_prca', 'wo_bcb', 'wo_recon'}
+
+
+def _validate_ablation(ablation):
+    if ablation not in VALID_ABLATIONS:
+        raise ValueError('Unsupported ablation: {}'.format(ablation))
+    return ablation
+
+
 def _normalize_dilations(dilation):
     if isinstance(dilation, str):
         dilations = tuple(int(value.strip()) for value in dilation.split(',') if value.strip())
@@ -149,8 +169,9 @@ class PyramidRefinedChannelAttention(nn.Module):
         return out
 class ImprovedSpeMamba(nn.Module):
     def __init__(self, channels, token_num=4, use_residual=True, group_num=4, num_scales=3, num_layers=2,
-                 pyramid_dilation=2):
+                 pyramid_dilation=2, ablation='full'):
         super(ImprovedSpeMamba, self).__init__()
+        self.ablation = _validate_ablation(ablation)
         self.token_num = token_num
         self.use_residual = use_residual
         # Set group_channel_num based on token_num and channels
@@ -192,11 +213,15 @@ class ImprovedSpeMamba(nn.Module):
         # Apply padding to the input if necessary
         x_pad = self.padding_feature(x)
         # Inject first-order spectral differences before spectral attention.
-        x_diff = torch.diff(x_pad, n=1, dim=1)
-        x_diff = F.pad(x_diff, (0, 0, 0, 0, 0, 1), value=0.0)
-        x_pad = x_pad + x_diff
+        if self.ablation != 'wo_diff':
+            x_diff = torch.diff(x_pad, n=1, dim=1)
+            x_diff = F.pad(x_diff, (0, 0, 0, 0, 0, 1), value=0.0)
+            x_pad = x_pad + x_diff
         # Apply PyramidRefinedChannelAttention directly to the input tensor
-        x_re = self.pyramid_refined_attention(x_pad)
+        if self.ablation == 'wo_prca':
+            x_re = x_pad
+        else:
+            x_re = self.pyramid_refined_attention(x_pad)
 
         # Flatten the input for Mamba
         B, C, H, W = x_re.shape
@@ -298,8 +323,9 @@ def _consume_removed_spatial_init_rng(channels):
 
 class ImprovedSpaMamba(nn.Module):
     def __init__(self, channels, use_residual=True, group_num=4, token_num=4, num_scales=3, num_layers=2,
-                 pyramid_dilation=2):
+                 pyramid_dilation=2, ablation='full'):
         super(ImprovedSpaMamba, self).__init__()
+        self.ablation = _validate_ablation(ablation)
         self.use_residual = use_residual
         self.token_num = token_num
         self.group_channel_num = math.ceil(channels / token_num)
@@ -330,8 +356,15 @@ class ImprovedSpaMamba(nn.Module):
         )
 
     def forward(self, x):
-        x_prior = self.spatial_prior(x)
-        x_re = self.pyramid_refined_attention(x_prior)
+        if self.ablation == 'wo_lsp':
+            x_prior = x
+        else:
+            x_prior = self.spatial_prior(x)
+
+        if self.ablation == 'wo_prca':
+            x_re = x_prior
+        else:
+            x_re = self.pyramid_refined_attention(x_prior)
         B, C, H, W = x_re.shape
         x_flat = x_re.permute(0, 2, 3, 1).reshape(B, H * W, C)
         x_flat = self.mamba(x_flat)
@@ -438,14 +471,17 @@ class ConflictSuppressedCCAF(nn.Module):
         return competitive + self.beta * consensus * (1 - g_conflict)
 
 class ImprovedBothMamba(nn.Module):
-    def __init__(self, channels, token_num, use_residual, group_num=4, pyramid_dilation=2):
+    def __init__(self, channels, token_num, use_residual, group_num=4, pyramid_dilation=2,
+                 ablation='full'):
         super(ImprovedBothMamba, self).__init__()
+        self.ablation = _validate_ablation(ablation)
         self.use_residual = use_residual
         self.spa_mamba = ImprovedSpaMamba(
             channels,
             use_residual=use_residual,
             group_num=group_num,
             pyramid_dilation=pyramid_dilation,
+            ablation=ablation,
         )
         self.spe_mamba = ImprovedSpeMamba(
             channels,
@@ -453,26 +489,42 @@ class ImprovedBothMamba(nn.Module):
             use_residual=use_residual,
             group_num=group_num,
             pyramid_dilation=pyramid_dilation,
+            ablation=ablation,
         )
         self.cross_bridge = CrossBranchBridge(channels, reduction=4)
         self.fusion = ConflictSuppressedCCAF(channels, reduction=8)
 
     def forward(self, x):
+        if self.ablation == 'wo_lpps':
+            spe_x = self.spe_mamba(x)
+            return spe_x + x if self.use_residual else spe_x
+
+        if self.ablation == 'wo_dgs':
+            spa_x = self.spa_mamba(x)
+            return spa_x + x if self.use_residual else spa_x
+
         spa_x = self.spa_mamba(x)
         spe_x = self.spe_mamba(x)
-        spa_x, spe_x = self.cross_bridge(spa_x, spe_x)
-        fusion_x = self.fusion(spa_x, spe_x)
+
+        if self.ablation != 'wo_bcb':
+            spa_x, spe_x = self.cross_bridge(spa_x, spe_x)
+
+        if self.ablation == 'c3_add':
+            fusion_x = 0.5 * (spa_x + spe_x)
+        else:
+            fusion_x = self.fusion(spa_x, spe_x)
         return fusion_x + x if self.use_residual else fusion_x
 
     def get_fusion_beta(self):
-        if hasattr(self.fusion, 'beta'):
+        if self.ablation in C3_ACTIVE_ABLATIONS and hasattr(self.fusion, 'beta'):
             return self.fusion.beta.detach().item()
         return None
 
 class ImprovedMambaHSI(nn.Module):
     def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True,
-                 token_num=4, group_num=4, pyramid_dilation=(2, 3)):
+                 token_num=4, group_num=4, pyramid_dilation=(2, 3), ablation='full'):
         super(ImprovedMambaHSI, self).__init__()
+        self.ablation = _validate_ablation(ablation)
         mid_channels = max(hidden_dim // 2, group_num)
         if mid_channels % group_num != 0:
             mid_channels += group_num - mid_channels % group_num
@@ -490,6 +542,7 @@ class ImprovedMambaHSI(nn.Module):
                 use_residual=use_residual,
                 group_num=group_num,
                 pyramid_dilation=pyramid_dilation,
+                ablation=ablation,
             ),
             nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
         )

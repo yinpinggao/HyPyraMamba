@@ -10,7 +10,7 @@ from utils.evaluation import Evaluator
 from utils.HSICommonUtils import ImageStretching
 from utils.setup_logger import setup_logger
 from utils.visual_predict import visualize_predict
-from model.MambaHSI import ImprovedMambaHSI as MambaHSI
+from model.MambaHSI import ImprovedMambaHSI as MambaHSI, VALID_ABLATIONS
 from calflops import calculate_flops
 from sklearn.decomposition import PCA
 from scipy.ndimage import gaussian_filter
@@ -56,7 +56,7 @@ def get_parser():
     parser.add_argument('--work_dir', type=str, default='./')
 
     parser.add_argument('--lr', type=float, default=0.0003)
-    parser.add_argument('--max_epoch', type=int, default=300)
+    parser.add_argument('--max_epoch', type=int, default=200)
     parser.add_argument('--train_samples', type=int, default=30)
     parser.add_argument('--val_samples', type=int, default=10)
     parser.add_argument('--exp_name', type=str, default='RUNS')
@@ -66,6 +66,7 @@ def get_parser():
     parser.add_argument('--lambda_recon', type=float, default=0.05)
     parser.add_argument('--recon_loss_type', type=str, default='smoothl1')
     parser.add_argument('--pyramid_dilation', type=str, default='3')
+    parser.add_argument('--ablation', type=str, default='full', choices=sorted(VALID_ABLATIONS))
 
     args = parser.parse_args()
     return args
@@ -82,8 +83,10 @@ dataset_index = args.dataset_index
 max_epoch = args.max_epoch
 learning_rate = args.lr
 lambda_recon = args.lambda_recon
+effective_lambda_recon = 0.0 if args.ablation == 'wo_recon' else lambda_recon
 pyramid_dilation = args.pyramid_dilation
-save_net_name = 'MambaHSI_{}'.format(FUSION_NAME)
+base_save_net_name = 'MambaHSI_{}'.format(FUSION_NAME)
+save_net_name = base_save_net_name if args.ablation == 'full' else '{}_{}'.format(base_save_net_name, args.ablation)
 data_set_name_list = ['UP', 'HanChuan', 'HongHu', 'Houston','LongKou','Salinas','indian','Botswana','XuZhou','Pavia']
 data_set_name = data_set_name_list[dataset_index]
 split_image = data_set_name in ['HanChuan', 'Houston','Pavia']
@@ -100,14 +103,17 @@ else:
 
 paras_dict = {
     'net_name': save_net_name,
+    'save_net_name': save_net_name,
     'dataset_index': dataset_index,
     'num_list': num_list,
     'lr': learning_rate,
     'seed_list': seed_list,
     'label_smoothing': label_smoothing,
     'fusion_mode': FUSION_NAME,
+    'ablation': args.ablation,
     'class_weight_mode': class_weight_mode,
     'lambda_recon': lambda_recon,
+    'effective_lambda_recon': effective_lambda_recon,
     'recon_loss_type': args.recon_loss_type,
     'pyramid_dilation': pyramid_dilation,
 }
@@ -125,6 +131,21 @@ def compute_recon_loss(recon_loss_func, recon_pred, target):
         align_corners=False
     )
     return recon_loss_func(recon_pred_up, target)
+
+
+def compute_train_losses(net, input_tensor, label_tensor, loss_func, recon_loss_func, effective_lambda):
+    if effective_lambda > 0:
+        pred, recon_pred = net(input_tensor, return_aux=True)
+        cls_loss = head_loss(loss_func, pred, label_tensor.long())
+        recon_loss = compute_recon_loss(recon_loss_func, recon_pred, input_tensor)
+        total_loss = cls_loss + effective_lambda * recon_loss
+    else:
+        pred = net(input_tensor, return_aux=False)
+        cls_loss = head_loss(loss_func, pred, label_tensor.long())
+        recon_loss = torch.zeros((), dtype=cls_loss.dtype, device=cls_loss.device)
+        total_loss = cls_loss
+
+    return cls_loss, recon_loss, total_loss
 
 
 def get_fusion_status(model):
@@ -208,6 +229,7 @@ if __name__ == '__main__':
             num_classes=class_count,
             hidden_dim=128,
             pyramid_dilation=pyramid_dilation,
+            ablation=args.ablation,
         )
 
         logger.info(paras_dict)
@@ -264,21 +286,27 @@ if __name__ == '__main__':
                 x_part2 = x[:, :, x.shape[2] // 2 - 5:, :]
                 y_part2 = y_train[:, x.shape[2] // 2 - 5:, :]
 
-                # 第一部分前向传播
-                y_pred_part1, recon_part1 = net(x_part1, return_aux=True)
-                cls_loss_part1 = head_loss(loss_func, y_pred_part1, y_part1.long())
-                recon_loss_part1 = compute_recon_loss(recon_loss_func, recon_part1, x_part1)
-                ls1 = cls_loss_part1 + lambda_recon * recon_loss_part1
+                cls_loss_part1, recon_loss_part1, ls1 = compute_train_losses(
+                    net,
+                    x_part1,
+                    y_part1,
+                    loss_func,
+                    recon_loss_func,
+                    effective_lambda_recon
+                )
                 optimizer.zero_grad()
                 ls1.backward()
                 optimizer.step()
                 torch.cuda.empty_cache()
 
-                # 第二部分前向传播
-                y_pred_part2, recon_part2 = net(x_part2, return_aux=True)
-                cls_loss_part2 = head_loss(loss_func, y_pred_part2, y_part2.long())
-                recon_loss_part2 = compute_recon_loss(recon_loss_func, recon_part2, x_part2)
-                ls2 = cls_loss_part2 + lambda_recon * recon_loss_part2
+                cls_loss_part2, recon_loss_part2, ls2 = compute_train_losses(
+                    net,
+                    x_part2,
+                    y_part2,
+                    loss_func,
+                    recon_loss_func,
+                    effective_lambda_recon
+                )
                 optimizer.zero_grad()
                 ls2.backward()
                 optimizer.step()
@@ -297,10 +325,14 @@ if __name__ == '__main__':
             else:
                 try:
                     with autocast(enabled=device.type == 'cuda'):
-                        y_pred, recon_pred = net(x, return_aux=True)
-                        cls_loss = head_loss(loss_func, y_pred, y_train.long())
-                        recon_loss = compute_recon_loss(recon_loss_func, recon_pred, x)
-                        ls = cls_loss + lambda_recon * recon_loss
+                        cls_loss, recon_loss, ls = compute_train_losses(
+                            net,
+                            x,
+                            y_train,
+                            loss_func,
+                            recon_loss_func,
+                            effective_lambda_recon
+                        )
                     optimizer.zero_grad()
                     scaler.scale(ls).backward()
                     scaler.step(optimizer)
@@ -324,18 +356,26 @@ if __name__ == '__main__':
                     x_part2 = x[:, :, x.shape[2] // 2 - 5:, :]
                     y_part2 = y_train[:, x.shape[2] // 2 - 5:, :]
 
-                    y_pred_part1, recon_part1 = net(x_part1, return_aux=True)
-                    cls_loss_part1 = head_loss(loss_func, y_pred_part1, y_part1.long())
-                    recon_loss_part1 = compute_recon_loss(recon_loss_func, recon_part1, x_part1)
-                    ls1 = cls_loss_part1 + lambda_recon * recon_loss_part1
+                    cls_loss_part1, recon_loss_part1, ls1 = compute_train_losses(
+                        net,
+                        x_part1,
+                        y_part1,
+                        loss_func,
+                        recon_loss_func,
+                        effective_lambda_recon
+                    )
                     optimizer.zero_grad()
                     ls1.backward()
                     optimizer.step()
 
-                    y_pred_part2, recon_part2 = net(x_part2, return_aux=True)
-                    cls_loss_part2 = head_loss(loss_func, y_pred_part2, y_part2.long())
-                    recon_loss_part2 = compute_recon_loss(recon_loss_func, recon_part2, x_part2)
-                    ls2 = cls_loss_part2 + lambda_recon * recon_loss_part2
+                    cls_loss_part2, recon_loss_part2, ls2 = compute_train_losses(
+                        net,
+                        x_part2,
+                        y_part2,
+                        loss_func,
+                        recon_loss_func,
+                        effective_lambda_recon
+                    )
                     optimizer.zero_grad()
                     ls2.backward()
                     optimizer.step()
@@ -392,6 +432,7 @@ if __name__ == '__main__':
             num_classes=class_count,
             hidden_dim=128,
             pyramid_dilation=pyramid_dilation,
+            ablation=args.ablation,
         )
         best_net.to(device)
         best_net.load_state_dict(torch.load(load_weight_path))
