@@ -62,7 +62,7 @@ def get_parser():
     parser.add_argument('--exp_name', type=str, default='RUNS')
     parser.add_argument('--record_computecost', type=bool, default=False)
     parser.add_argument('--label_smoothing', type=float, default=0.05)
-    parser.add_argument('--class_weight_mode', type=str, default='auto', choices=['auto', 'none', 'balanced'])
+    parser.add_argument('--class_weight_mode', type=str, default='none', choices=['auto', 'none', 'balanced'])
     parser.add_argument('--lambda_recon', type=float, default=0.05)
     parser.add_argument('--recon_loss_type', type=str, default='smoothl1')
     parser.add_argument('--pyramid_dilation', type=str, default='3')
