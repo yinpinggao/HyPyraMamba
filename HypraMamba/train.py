@@ -10,7 +10,7 @@ from utils.evaluation import Evaluator
 from utils.HSICommonUtils import ImageStretching
 from utils.setup_logger import setup_logger
 from utils.visual_predict import visualize_predict
-from model.MambaHSI import ImprovedMambaHSI as MambaHSI, VALID_ABLATIONS
+from model.MambaHSI import ImprovedMambaHSI as MambaHSI, VALID_ABLATIONS, VALID_OUTER_RESIDUAL_MODES
 from calflops import calculate_flops
 from sklearn.decomposition import PCA
 from scipy.ndimage import gaussian_filter
@@ -63,10 +63,10 @@ def get_parser():
     parser.add_argument('--record_computecost', type=bool, default=False)
     parser.add_argument('--label_smoothing', type=float, default=0.05)
     parser.add_argument('--class_weight_mode', type=str, default='none', choices=['auto', 'none', 'balanced'])
-    parser.add_argument('--lambda_recon', type=float, default=0.05)
-    parser.add_argument('--recon_loss_type', type=str, default='smoothl1')
     parser.add_argument('--pyramid_dilation', type=str, default='3')
     parser.add_argument('--ablation', type=str, default='full', choices=sorted(VALID_ABLATIONS))
+    parser.add_argument('--outer_residual_mode', type=str, default='standard', choices=sorted(VALID_OUTER_RESIDUAL_MODES))
+    parser.add_argument('--outer_residual_alpha', type=float, default=1.0)
 
     args = parser.parse_args()
     return args
@@ -82,11 +82,23 @@ num_list = [args.train_samples, args.val_samples]
 dataset_index = args.dataset_index
 max_epoch = args.max_epoch
 learning_rate = args.lr
-lambda_recon = args.lambda_recon
-effective_lambda_recon = 0.0 if args.ablation == 'wo_recon' else lambda_recon
 pyramid_dilation = args.pyramid_dilation
 base_save_net_name = 'MambaHSI_{}'.format(FUSION_NAME)
-save_net_name = base_save_net_name if args.ablation == 'full' else '{}_{}'.format(base_save_net_name, args.ablation)
+
+
+def format_float_for_name(value):
+    return '{:g}'.format(value).replace('-', 'm').replace('.', 'p')
+
+
+if args.outer_residual_mode == 'standard':
+    outer_residual_tag = ''
+elif args.outer_residual_mode == 'no_outer':
+    outer_residual_tag = 'no_outer'
+else:
+    outer_residual_tag = 'outer_alpha{}'.format(format_float_for_name(args.outer_residual_alpha))
+
+save_net_base = base_save_net_name if outer_residual_tag == '' else '{}_{}'.format(base_save_net_name, outer_residual_tag)
+save_net_name = save_net_base if args.ablation == 'full' else '{}_{}'.format(save_net_base, args.ablation)
 data_set_name_list = ['UP', 'HanChuan', 'HongHu', 'Houston','LongKou','Salinas','indian','Botswana','XuZhou','Pavia']
 data_set_name = data_set_name_list[dataset_index]
 split_image = data_set_name in ['HanChuan', 'Houston','Pavia']
@@ -112,10 +124,9 @@ paras_dict = {
     'fusion_mode': FUSION_NAME,
     'ablation': args.ablation,
     'class_weight_mode': class_weight_mode,
-    'lambda_recon': lambda_recon,
-    'effective_lambda_recon': effective_lambda_recon,
-    'recon_loss_type': args.recon_loss_type,
     'pyramid_dilation': pyramid_dilation,
+    'outer_residual_mode': args.outer_residual_mode,
+    'outer_residual_alpha': args.outer_residual_alpha,
 }
 
 transform = transforms.Compose([
@@ -123,29 +134,9 @@ transform = transforms.Compose([
 ])
 
 
-def compute_recon_loss(recon_loss_func, recon_pred, target):
-    recon_pred_up = resize(
-        input=recon_pred,
-        size=target.shape[2:],
-        mode='bilinear',
-        align_corners=False
-    )
-    return recon_loss_func(recon_pred_up, target)
-
-
-def compute_train_losses(net, input_tensor, label_tensor, loss_func, recon_loss_func, effective_lambda):
-    if effective_lambda > 0:
-        pred, recon_pred = net(input_tensor, return_aux=True)
-        cls_loss = head_loss(loss_func, pred, label_tensor.long())
-        recon_loss = compute_recon_loss(recon_loss_func, recon_pred, input_tensor)
-        total_loss = cls_loss + effective_lambda * recon_loss
-    else:
-        pred = net(input_tensor, return_aux=False)
-        cls_loss = head_loss(loss_func, pred, label_tensor.long())
-        recon_loss = torch.zeros((), dtype=cls_loss.dtype, device=cls_loss.device)
-        total_loss = cls_loss
-
-    return cls_loss, recon_loss, total_loss
+def compute_train_loss(net, input_tensor, label_tensor, loss_func):
+    pred = net(input_tensor)
+    return head_loss(loss_func, pred, label_tensor.long())
 
 
 def get_fusion_status(model):
@@ -230,6 +221,8 @@ if __name__ == '__main__':
             hidden_dim=128,
             pyramid_dilation=pyramid_dilation,
             ablation=args.ablation,
+            outer_residual_mode=args.outer_residual_mode,
+            outer_residual_alpha=args.outer_residual_alpha,
         )
 
         logger.info(paras_dict)
@@ -250,11 +243,6 @@ if __name__ == '__main__':
             logger.info('class_weights: {}'.format([round(v, 4) for v in class_weights.detach().cpu().tolist()]))
         else:
             loss_func = torch.nn.CrossEntropyLoss(ignore_index=-1, label_smoothing=label_smoothing)
-
-        if args.recon_loss_type == 'mse':
-            recon_loss_func = torch.nn.MSELoss()
-        else:
-            recon_loss_func = torch.nn.SmoothL1Loss()
 
         train_label = train_label.to(device)
         test_label = test_label.to(device)
@@ -286,38 +274,32 @@ if __name__ == '__main__':
                 x_part2 = x[:, :, x.shape[2] // 2 - 5:, :]
                 y_part2 = y_train[:, x.shape[2] // 2 - 5:, :]
 
-                cls_loss_part1, recon_loss_part1, ls1 = compute_train_losses(
+                loss_part1 = compute_train_loss(
                     net,
                     x_part1,
                     y_part1,
-                    loss_func,
-                    recon_loss_func,
-                    effective_lambda_recon
+                    loss_func
                 )
                 optimizer.zero_grad()
-                ls1.backward()
+                loss_part1.backward()
                 optimizer.step()
                 torch.cuda.empty_cache()
 
-                cls_loss_part2, recon_loss_part2, ls2 = compute_train_losses(
+                loss_part2 = compute_train_loss(
                     net,
                     x_part2,
                     y_part2,
-                    loss_func,
-                    recon_loss_func,
-                    effective_lambda_recon
+                    loss_func
                 )
                 optimizer.zero_grad()
-                ls2.backward()
+                loss_part2.backward()
                 optimizer.step()
                 torch.cuda.empty_cache()
 
                 logger.info(
-                    'Iter:{}|cls_loss:{}|recon_loss:{}|total_loss:{}'.format(
+                    'Iter:{}|cls_loss:{}'.format(
                         epoch,
-                        (cls_loss_part1 + cls_loss_part2).detach().cpu().numpy(),
-                        (recon_loss_part1 + recon_loss_part2).detach().cpu().numpy(),
-                        (ls1 + ls2).detach().cpu().numpy()
+                        (loss_part1 + loss_part2).detach().cpu().numpy()
                     )
                 )
 
@@ -325,25 +307,21 @@ if __name__ == '__main__':
             else:
                 try:
                     with autocast(enabled=device.type == 'cuda'):
-                        cls_loss, recon_loss, ls = compute_train_losses(
+                        loss = compute_train_loss(
                             net,
                             x,
                             y_train,
-                            loss_func,
-                            recon_loss_func,
-                            effective_lambda_recon
+                            loss_func
                         )
                     optimizer.zero_grad()
-                    scaler.scale(ls).backward()
+                    scaler.scale(loss).backward()
                     scaler.step(optimizer)
                     scaler.update()
                     torch.cuda.empty_cache()
                     logger.info(
-                        'Iter:{}|cls_loss:{}|recon_loss:{}|total_loss:{}'.format(
+                        'Iter:{}|cls_loss:{}'.format(
                             epoch,
-                            cls_loss.detach().cpu().numpy(),
-                            recon_loss.detach().cpu().numpy(),
-                            ls.detach().cpu().numpy()
+                            loss.detach().cpu().numpy()
                         )
                     )
 
@@ -356,36 +334,30 @@ if __name__ == '__main__':
                     x_part2 = x[:, :, x.shape[2] // 2 - 5:, :]
                     y_part2 = y_train[:, x.shape[2] // 2 - 5:, :]
 
-                    cls_loss_part1, recon_loss_part1, ls1 = compute_train_losses(
+                    loss_part1 = compute_train_loss(
                         net,
                         x_part1,
                         y_part1,
-                        loss_func,
-                        recon_loss_func,
-                        effective_lambda_recon
+                        loss_func
                     )
                     optimizer.zero_grad()
-                    ls1.backward()
+                    loss_part1.backward()
                     optimizer.step()
 
-                    cls_loss_part2, recon_loss_part2, ls2 = compute_train_losses(
+                    loss_part2 = compute_train_loss(
                         net,
                         x_part2,
                         y_part2,
-                        loss_func,
-                        recon_loss_func,
-                        effective_lambda_recon
+                        loss_func
                     )
                     optimizer.zero_grad()
-                    ls2.backward()
+                    loss_part2.backward()
                     optimizer.step()
 
                     logger.info(
-                        'Iter:{}|cls_loss:{}|recon_loss:{}|total_loss:{}'.format(
+                        'Iter:{}|cls_loss:{}'.format(
                             epoch,
-                            (cls_loss_part1 + cls_loss_part2).detach().cpu().numpy(),
-                            (recon_loss_part1 + recon_loss_part2).detach().cpu().numpy(),
-                            (ls1 + ls2).detach().cpu().numpy()
+                            (loss_part1 + loss_part2).detach().cpu().numpy()
                         )
                     )
 
@@ -433,6 +405,8 @@ if __name__ == '__main__':
             hidden_dim=128,
             pyramid_dilation=pyramid_dilation,
             ablation=args.ablation,
+            outer_residual_mode=args.outer_residual_mode,
+            outer_residual_alpha=args.outer_residual_alpha,
         )
         best_net.to(device)
         best_net.load_state_dict(torch.load(load_weight_path))

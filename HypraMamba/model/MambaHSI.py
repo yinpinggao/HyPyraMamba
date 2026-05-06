@@ -1,6 +1,5 @@
 import math
 import torch
-import torch.nn.functional as F
 from torch import nn
 from einops import rearrange
 from mamba_ssm import Mamba
@@ -11,19 +10,23 @@ VALID_ABLATIONS = {
     'wo_lpps',
     'wo_dgs',
     'wo_lsp',
-    'wo_diff',
     'wo_prca',
-    'wo_bcb',
     'c3_add',
-    'wo_recon',
 }
-C3_ACTIVE_ABLATIONS = {'full', 'wo_lsp', 'wo_diff', 'wo_prca', 'wo_bcb', 'wo_recon'}
+C3_ACTIVE_ABLATIONS = {'full', 'wo_lsp', 'wo_prca'}
+VALID_OUTER_RESIDUAL_MODES = {'standard', 'no_outer', 'scaled'}
 
 
 def _validate_ablation(ablation):
     if ablation not in VALID_ABLATIONS:
         raise ValueError('Unsupported ablation: {}'.format(ablation))
     return ablation
+
+
+def _validate_outer_residual_mode(mode):
+    if mode not in VALID_OUTER_RESIDUAL_MODES:
+        raise ValueError('Unsupported outer_residual_mode: {}'.format(mode))
+    return mode
 
 
 def _normalize_dilations(dilation):
@@ -212,11 +215,6 @@ class ImprovedSpeMamba(nn.Module):
     def forward(self, x):
         # Apply padding to the input if necessary
         x_pad = self.padding_feature(x)
-        # Inject first-order spectral differences before spectral attention.
-        if self.ablation != 'wo_diff':
-            x_diff = torch.diff(x_pad, n=1, dim=1)
-            x_diff = F.pad(x_diff, (0, 0, 0, 0, 0, 1), value=0.0)
-            x_pad = x_pad + x_diff
         # Apply PyramidRefinedChannelAttention directly to the input tensor
         if self.ablation == 'wo_prca':
             x_re = x_pad
@@ -227,14 +225,14 @@ class ImprovedSpeMamba(nn.Module):
         B, C, H, W = x_re.shape
         x_re_flat = x_re.view(B * H * W, self.token_num, self.group_channel_num)  # Flatten for Mamba
         # Apply Mamba for feature learning
-        x_recon = self.mamba(x_re_flat)
+        x_out = self.mamba(x_re_flat)
 
         # Reshape back to original dimensions
-        x_recon = x_recon.view(B, C, H, W)
+        x_out = x_out.view(B, C, H, W)
         # Apply the final projection to map the feature map to the output space
-        x_recon = self.proj(x_recon)
+        x_out = self.proj(x_out)
         # If residual connection is enabled, add the input to the output
-        return x_recon + x if self.use_residual else x_recon
+        return x_out + x if self.use_residual else x_out
 
 
 class LightSpatialPrior(nn.Module):
@@ -369,49 +367,12 @@ class ImprovedSpaMamba(nn.Module):
         x_flat = x_re.permute(0, 2, 3, 1).reshape(B, H * W, C)
         x_flat = self.mamba(x_flat)
 
-        x_recon = x_flat.reshape(B, H, W, C).permute(0, 3, 1, 2)
-        x_recon = self.proj(x_recon)
+        x_out = x_flat.reshape(B, H, W, C).permute(0, 3, 1, 2)
+        x_out = self.proj(x_out)
 
-        return x_recon + x_prior if self.use_residual else x_recon
+        return x_out + x_prior if self.use_residual else x_out
 
 
-class CrossBranchBridge(nn.Module):
-    """
-    Channel-wise gating bridge. No spatial attention, O(C) not O(N^2).
-    """
-    def __init__(self, channels, reduction=4):
-        super(CrossBranchBridge, self).__init__()
-        mid = max(channels // reduction, 4)
-        # spa gated by spe channel descriptor
-        self.gate_spa = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(1),
-            nn.Linear(channels, mid, bias=False),
-            nn.SiLU(),
-            nn.Linear(mid, channels, bias=False),
-            nn.Sigmoid(),
-        )
-        # spe gated by spa channel descriptor
-        self.gate_spe = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(1),
-            nn.Linear(channels, mid, bias=False),
-            nn.SiLU(),
-            nn.Linear(mid, channels, bias=False),
-            nn.Sigmoid(),
-        )
-        self.gamma_spa = nn.Parameter(torch.zeros(1))
-        self.gamma_spe = nn.Parameter(torch.zeros(1))
-
-    def forward(self, spa_feat, spe_feat):
-        # spe tells spa which channels are spectrally informative
-        g_spa = self.gate_spa(spe_feat).unsqueeze(-1).unsqueeze(-1)
-        spa_out = spa_feat + self.gamma_spa * (g_spa * spa_feat)
-
-        # spa tells spe which channels are spatially informative
-        g_spe = self.gate_spe(spa_feat).unsqueeze(-1).unsqueeze(-1)
-        spe_out = spe_feat + self.gamma_spe * (g_spe * spe_feat)
-        return spa_out, spe_out
 class ConflictSuppressedCCAF(nn.Module):
     """
     在 CCAF 基础上加入冲突抑制，只在低冲突通道放大共识项。
@@ -472,9 +433,11 @@ class ConflictSuppressedCCAF(nn.Module):
 
 class ImprovedBothMamba(nn.Module):
     def __init__(self, channels, token_num, use_residual, group_num=4, pyramid_dilation=2,
-                 ablation='full'):
+                 ablation='full', outer_residual_mode='standard', outer_residual_alpha=1.0):
         super(ImprovedBothMamba, self).__init__()
         self.ablation = _validate_ablation(ablation)
+        self.outer_residual_mode = _validate_outer_residual_mode(outer_residual_mode)
+        self.outer_residual_alpha = float(outer_residual_alpha)
         self.use_residual = use_residual
         self.spa_mamba = ImprovedSpaMamba(
             channels,
@@ -491,29 +454,32 @@ class ImprovedBothMamba(nn.Module):
             pyramid_dilation=pyramid_dilation,
             ablation=ablation,
         )
-        self.cross_bridge = CrossBranchBridge(channels, reduction=4)
         self.fusion = ConflictSuppressedCCAF(channels, reduction=8)
+
+    def _apply_outer_residual(self, x, block_x):
+        if not self.use_residual or self.outer_residual_mode == 'no_outer':
+            return block_x
+        if self.outer_residual_mode == 'scaled':
+            return x + self.outer_residual_alpha * block_x
+        return block_x + x
 
     def forward(self, x):
         if self.ablation == 'wo_lpps':
             spe_x = self.spe_mamba(x)
-            return spe_x + x if self.use_residual else spe_x
+            return self._apply_outer_residual(x, spe_x)
 
         if self.ablation == 'wo_dgs':
             spa_x = self.spa_mamba(x)
-            return spa_x + x if self.use_residual else spa_x
+            return self._apply_outer_residual(x, spa_x)
 
         spa_x = self.spa_mamba(x)
         spe_x = self.spe_mamba(x)
-
-        if self.ablation != 'wo_bcb':
-            spa_x, spe_x = self.cross_bridge(spa_x, spe_x)
 
         if self.ablation == 'c3_add':
             fusion_x = 0.5 * (spa_x + spe_x)
         else:
             fusion_x = self.fusion(spa_x, spe_x)
-        return fusion_x + x if self.use_residual else fusion_x
+        return self._apply_outer_residual(x, fusion_x)
 
     def get_fusion_beta(self):
         if self.ablation in C3_ACTIVE_ABLATIONS and hasattr(self.fusion, 'beta'):
@@ -522,12 +488,10 @@ class ImprovedBothMamba(nn.Module):
 
 class ImprovedMambaHSI(nn.Module):
     def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True,
-                 token_num=4, group_num=4, pyramid_dilation=(2, 3), ablation='full'):
+                 token_num=4, group_num=4, pyramid_dilation=(2, 3), ablation='full',
+                 outer_residual_mode='standard', outer_residual_alpha=1.0):
         super(ImprovedMambaHSI, self).__init__()
         self.ablation = _validate_ablation(ablation)
-        mid_channels = max(hidden_dim // 2, group_num)
-        if mid_channels % group_num != 0:
-            mid_channels += group_num - mid_channels % group_num
 
         self.patch_embedding = nn.Sequential(
             nn.Conv2d(in_channels=in_channels, out_channels=hidden_dim, kernel_size=1, stride=1, padding=0),
@@ -543,6 +507,8 @@ class ImprovedMambaHSI(nn.Module):
                 group_num=group_num,
                 pyramid_dilation=pyramid_dilation,
                 ablation=ablation,
+                outer_residual_mode=outer_residual_mode,
+                outer_residual_alpha=outer_residual_alpha,
             ),
             nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
         )
@@ -553,23 +519,11 @@ class ImprovedMambaHSI(nn.Module):
             nn.SiLU(),
             nn.Conv2d(in_channels=128, out_channels=num_classes, kernel_size=1, stride=1, padding=0)
         )
-        self.recon_head = nn.Sequential(
-            nn.Conv2d(hidden_dim, mid_channels, kernel_size=1, stride=1, padding=0),
-            nn.GroupNorm(group_num, mid_channels),
-            nn.SiLU(),
-            nn.Conv2d(mid_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        )
 
-    def forward(self, x, return_aux=False):
+    def forward(self, x):
         x = self.patch_embedding(x)
         x_feat = self.mamba(x)
-        logits = self.cls_head(x_feat)
-
-        if return_aux:
-            recon = self.recon_head(x_feat)
-            return logits, recon
-
-        return logits
+        return self.cls_head(x_feat)
 
     def get_fusion_beta(self):
         if len(self.mamba) > 0 and hasattr(self.mamba[0], 'get_fusion_beta'):

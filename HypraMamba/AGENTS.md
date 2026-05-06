@@ -27,16 +27,13 @@ Input preprocessing in `train.py`: Gaussian smoothing (`sigma=1`) and PCA to 30 
 1. `patch_embedding`: `1x1 Conv(30 -> 128) + GroupNorm + SiLU`.
 2. Dual branch encoder in `ImprovedBothMamba`:
    - Spatial branch: `LightSpatialPrior -> PyramidRefinedChannelAttention -> Mamba` over flattened spatial tokens.
-   - Spectral branch: spectral first-difference injection -> `PyramidRefinedChannelAttention -> Mamba` over 4 spectral tokens per pixel.
-3. `CrossBranchBridge`: channel gates let the spectral branch reweight spatial channels, and vice versa.
-4. `ConflictSuppressedCCAF` (`ccaf_v2`): first does per-channel competitive fusion, then adds a gated consensus term, and suppresses that consensus on high-conflict channels. The fused output is added back to the input residual.
-5. `AvgPool2d(2)` after fusion, then:
-   - classification head: `1x1 Conv(128 -> 128 -> num_classes)`
-   - reconstruction head: `1x1 Conv(128 -> 64 -> 30)` for the auxiliary loss.
+   - Spectral branch: `PyramidRefinedChannelAttention -> Mamba` over 4 spectral tokens per pixel.
+3. `ConflictSuppressedCCAF` (`ccaf_v2`): first does per-channel competitive fusion, then adds a gated consensus term, and suppresses that consensus on high-conflict channels. The fused output is added back to the input residual.
+4. `AvgPool2d(2)` after fusion, then the classification head: `1x1 Conv(128 -> 128 -> num_classes)`.
 
 `spatial_mode` is left at `auto`, but the current `ImprovedSpaMamba` implementation stores this flag and does not branch on it. So these four runs share the same spatial block code path.
 
 ## Training, Testing, and Review
-Default training here is `Adam(lr=3e-4, weight_decay=1e-5)`, 200 epochs, `train_samples=30`, `val_samples=10`, and 3 seeds. The loss is cross-entropy plus `0.05 * recon_loss`; `recon_loss` defaults to `SmoothL1`. `indian` also auto-enables balanced class weights and label smoothing. The best checkpoint is selected by validation OA, then tested and written to `result_*.txt` and `mean_result.txt`.
+Default training here is `Adam(lr=3e-4, weight_decay=1e-5)`, 200 epochs, `train_samples=30`, `val_samples=10`, and 3 seeds. The loss is cross-entropy. `indian` also auto-enables balanced class weights and label smoothing. The best checkpoint is selected by validation OA, then tested and written to `result_*.txt` and `mean_result.txt`.
 
 Keep Python style consistent with the repo: 4-space indentation, snake_case for functions, CamelCase for `nn.Module` classes. Recent commits use short experiment-focused subjects such as `CCAF-V2` or `实验一：去掉DynamicConvBlock`.
