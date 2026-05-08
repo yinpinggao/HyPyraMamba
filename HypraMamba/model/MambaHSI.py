@@ -11,9 +11,17 @@ VALID_ABLATIONS = {
     'wo_dgs',
     'wo_lsp',
     'wo_prca',
+    'wo_spa_prca',
+    'wo_spe_prca',
     'c3_add',
 }
-C3_ACTIVE_ABLATIONS = {'full', 'wo_lsp', 'wo_prca'}
+C3_ACTIVE_ABLATIONS = {'full', 'wo_lsp', 'wo_prca', 'wo_spa_prca', 'wo_spe_prca'}
+SPATIAL_BRANCH_DISABLED_ABLATIONS = {'wo_lpps'}
+SPECTRAL_BRANCH_DISABLED_ABLATIONS = {'wo_dgs'}
+SPATIAL_PRIOR_DISABLED_ABLATIONS = {'wo_lsp'}
+SPATIAL_PRCA_DISABLED_ABLATIONS = {'wo_prca', 'wo_spa_prca'}
+SPECTRAL_PRCA_DISABLED_ABLATIONS = {'wo_prca', 'wo_spe_prca'}
+CCAF_DISABLED_ABLATIONS = {'wo_lpps', 'wo_dgs', 'c3_add'}
 VALID_OUTER_RESIDUAL_MODES = {'standard', 'no_outer', 'scaled'}
 
 
@@ -180,15 +188,18 @@ class ImprovedSpeMamba(nn.Module):
         # Set group_channel_num based on token_num and channels
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
-        # Initialize PyramidRefinedChannelAttention
-        self.pyramid_refined_attention = PyramidRefinedChannelAttention(
-            dim=self.channel_num,  # Apply attention on channel_num
-            num_heads=4,  # You can adjust num_heads as per your requirements
-            bias=True,
-            num_scales=num_scales,
-            num_layers=num_layers,
-            dilation=pyramid_dilation
-        )
+        self.use_prca = self.ablation not in SPECTRAL_PRCA_DISABLED_ABLATIONS
+        if self.use_prca:
+            self.pyramid_refined_attention = PyramidRefinedChannelAttention(
+                dim=self.channel_num,
+                num_heads=4,
+                bias=True,
+                num_scales=num_scales,
+                num_layers=num_layers,
+                dilation=pyramid_dilation
+            )
+        else:
+            self.pyramid_refined_attention = None
         # Initialize Mamba module for feature learning
         self.mamba = Mamba(
             d_model=self.group_channel_num,
@@ -216,7 +227,7 @@ class ImprovedSpeMamba(nn.Module):
         # Apply padding to the input if necessary
         x_pad = self.padding_feature(x)
         # Apply PyramidRefinedChannelAttention directly to the input tensor
-        if self.ablation == 'wo_prca':
+        if self.pyramid_refined_attention is None:
             x_re = x_pad
         else:
             x_re = self.pyramid_refined_attention(x_pad)
@@ -328,14 +339,18 @@ class ImprovedSpaMamba(nn.Module):
         self.token_num = token_num
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
-        self.pyramid_refined_attention = PyramidRefinedChannelAttention(
-            dim=self.channel_num,
-            num_heads=4,
-            bias=True,
-            num_scales=num_scales,
-            num_layers=num_layers,
-            dilation=pyramid_dilation
-        )
+        self.use_prca = self.ablation not in SPATIAL_PRCA_DISABLED_ABLATIONS
+        if self.use_prca:
+            self.pyramid_refined_attention = PyramidRefinedChannelAttention(
+                dim=self.channel_num,
+                num_heads=4,
+                bias=True,
+                num_scales=num_scales,
+                num_layers=num_layers,
+                dilation=pyramid_dilation
+            )
+        else:
+            self.pyramid_refined_attention = None
 
         self.mamba = Mamba(
             d_model=channels,
@@ -344,9 +359,13 @@ class ImprovedSpaMamba(nn.Module):
             expand=2,
         )
 
-        # Keep init order numerically aligned with the pre-cleanup model.
-        _consume_removed_spatial_init_rng(channels)
-        self.spatial_prior = LightSpatialPrior(channels, group_num=group_num)
+        self.use_spatial_prior = self.ablation not in SPATIAL_PRIOR_DISABLED_ABLATIONS
+        if self.use_spatial_prior:
+            # Keep init order numerically aligned with the pre-cleanup model.
+            _consume_removed_spatial_init_rng(channels)
+            self.spatial_prior = LightSpatialPrior(channels, group_num=group_num)
+        else:
+            self.spatial_prior = None
 
         self.proj = nn.Sequential(
             nn.GroupNorm(group_num, channels),
@@ -354,12 +373,12 @@ class ImprovedSpaMamba(nn.Module):
         )
 
     def forward(self, x):
-        if self.ablation == 'wo_lsp':
+        if self.spatial_prior is None:
             x_prior = x
         else:
             x_prior = self.spatial_prior(x)
 
-        if self.ablation == 'wo_prca':
+        if self.pyramid_refined_attention is None:
             x_re = x_prior
         else:
             x_re = self.pyramid_refined_attention(x_prior)
@@ -439,22 +458,37 @@ class ImprovedBothMamba(nn.Module):
         self.outer_residual_mode = _validate_outer_residual_mode(outer_residual_mode)
         self.outer_residual_alpha = float(outer_residual_alpha)
         self.use_residual = use_residual
-        self.spa_mamba = ImprovedSpaMamba(
-            channels,
-            use_residual=use_residual,
-            group_num=group_num,
-            pyramid_dilation=pyramid_dilation,
-            ablation=ablation,
-        )
-        self.spe_mamba = ImprovedSpeMamba(
-            channels,
-            token_num=token_num,
-            use_residual=use_residual,
-            group_num=group_num,
-            pyramid_dilation=pyramid_dilation,
-            ablation=ablation,
-        )
-        self.fusion = ConflictSuppressedCCAF(channels, reduction=8)
+        self.use_spatial_branch = self.ablation not in SPATIAL_BRANCH_DISABLED_ABLATIONS
+        self.use_spectral_branch = self.ablation not in SPECTRAL_BRANCH_DISABLED_ABLATIONS
+        self.use_ccaf = self.ablation not in CCAF_DISABLED_ABLATIONS
+
+        if self.use_spatial_branch:
+            self.spa_mamba = ImprovedSpaMamba(
+                channels,
+                use_residual=use_residual,
+                group_num=group_num,
+                pyramid_dilation=pyramid_dilation,
+                ablation=ablation,
+            )
+        else:
+            self.spa_mamba = None
+
+        if self.use_spectral_branch:
+            self.spe_mamba = ImprovedSpeMamba(
+                channels,
+                token_num=token_num,
+                use_residual=use_residual,
+                group_num=group_num,
+                pyramid_dilation=pyramid_dilation,
+                ablation=ablation,
+            )
+        else:
+            self.spe_mamba = None
+
+        if self.use_ccaf:
+            self.fusion = ConflictSuppressedCCAF(channels, reduction=8)
+        else:
+            self.fusion = None
 
     def _apply_outer_residual(self, x, block_x):
         if not self.use_residual or self.outer_residual_mode == 'no_outer':
@@ -464,25 +498,25 @@ class ImprovedBothMamba(nn.Module):
         return block_x + x
 
     def forward(self, x):
-        if self.ablation == 'wo_lpps':
+        if self.spa_mamba is None:
             spe_x = self.spe_mamba(x)
             return self._apply_outer_residual(x, spe_x)
 
-        if self.ablation == 'wo_dgs':
+        if self.spe_mamba is None:
             spa_x = self.spa_mamba(x)
             return self._apply_outer_residual(x, spa_x)
 
         spa_x = self.spa_mamba(x)
         spe_x = self.spe_mamba(x)
 
-        if self.ablation == 'c3_add':
+        if self.fusion is None:
             fusion_x = 0.5 * (spa_x + spe_x)
         else:
             fusion_x = self.fusion(spa_x, spe_x)
         return self._apply_outer_residual(x, fusion_x)
 
     def get_fusion_beta(self):
-        if self.ablation in C3_ACTIVE_ABLATIONS and hasattr(self.fusion, 'beta'):
+        if self.ablation in C3_ACTIVE_ABLATIONS and self.fusion is not None and hasattr(self.fusion, 'beta'):
             return self.fusion.beta.detach().item()
         return None
 
