@@ -19,7 +19,7 @@ from torchvision import transforms
 
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:64,garbage_collection_threshold:0.6'
 scaler = GradScaler(enabled=torch.cuda.is_available())
-FUSION_NAME = 'ccaf_v2'
+FUSION_NAME = 'competitive'
 
 
 def vis_a_image(gt_vis, pred_vis, save_single_predict_path, save_single_gt_path, only_vis_label=False):
@@ -140,12 +140,7 @@ def compute_train_loss(net, input_tensor, label_tensor, loss_func):
 
 
 def get_fusion_status(model):
-    status = 'Fusion mode: {}'.format(FUSION_NAME)
-    if model is not None and hasattr(model, 'get_fusion_beta'):
-        beta_value = model.get_fusion_beta()
-        if beta_value is not None:
-            status += '|beta:{:.6f}'.format(beta_value)
-    return status
+    return 'Fusion mode: {}'.format(FUSION_NAME)
 
 if __name__ == '__main__':
     data_set_path = args.data_set_path

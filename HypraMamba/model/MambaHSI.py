@@ -11,17 +11,11 @@ VALID_ABLATIONS = {
     'wo_dgs',
     'wo_lsp',
     'wo_prca',
-    'wo_spa_prca',
-    'wo_spe_prca',
-    'c3_add',
 }
-C3_ACTIVE_ABLATIONS = {'full', 'wo_lsp', 'wo_prca', 'wo_spa_prca', 'wo_spe_prca'}
 SPATIAL_BRANCH_DISABLED_ABLATIONS = {'wo_lpps'}
 SPECTRAL_BRANCH_DISABLED_ABLATIONS = {'wo_dgs'}
 SPATIAL_PRIOR_DISABLED_ABLATIONS = {'wo_lsp'}
-SPATIAL_PRCA_DISABLED_ABLATIONS = {'wo_prca', 'wo_spa_prca'}
-SPECTRAL_PRCA_DISABLED_ABLATIONS = {'wo_prca', 'wo_spe_prca'}
-CCAF_DISABLED_ABLATIONS = {'wo_lpps', 'wo_dgs', 'c3_add'}
+SPATIAL_PRCA_DISABLED_ABLATIONS = {'wo_prca'}
 VALID_OUTER_RESIDUAL_MODES = {'standard', 'no_outer', 'scaled'}
 
 
@@ -178,28 +172,16 @@ class PyramidRefinedChannelAttention(nn.Module):
         out = self.project_out(out)
 
         return out
+
+
 class ImprovedSpeMamba(nn.Module):
-    def __init__(self, channels, token_num=4, use_residual=True, group_num=4, num_scales=3, num_layers=2,
-                 pyramid_dilation=2, ablation='full'):
+    def __init__(self, channels, token_num=4, use_residual=True, group_num=4):
         super(ImprovedSpeMamba, self).__init__()
-        self.ablation = _validate_ablation(ablation)
         self.token_num = token_num
         self.use_residual = use_residual
         # Set group_channel_num based on token_num and channels
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
-        self.use_prca = self.ablation not in SPECTRAL_PRCA_DISABLED_ABLATIONS
-        if self.use_prca:
-            self.pyramid_refined_attention = PyramidRefinedChannelAttention(
-                dim=self.channel_num,
-                num_heads=4,
-                bias=True,
-                num_scales=num_scales,
-                num_layers=num_layers,
-                dilation=pyramid_dilation
-            )
-        else:
-            self.pyramid_refined_attention = None
         # Initialize Mamba module for feature learning
         self.mamba = Mamba(
             d_model=self.group_channel_num,
@@ -225,12 +207,7 @@ class ImprovedSpeMamba(nn.Module):
 
     def forward(self, x):
         # Apply padding to the input if necessary
-        x_pad = self.padding_feature(x)
-        # Apply PyramidRefinedChannelAttention directly to the input tensor
-        if self.pyramid_refined_attention is None:
-            x_re = x_pad
-        else:
-            x_re = self.pyramid_refined_attention(x_pad)
+        x_re = self.padding_feature(x)
 
         # Flatten the input for Mamba
         B, C, H, W = x_re.shape
@@ -277,59 +254,6 @@ class LightSpatialPrior(nn.Module):
         return out + x
 
 
-def _consume_removed_spatial_init_rng(channels):
-    """
-    Preserve the pre-cleanup parameter-init RNG sequence.
-
-    These layers were removed from the forward graph, but their original
-    constructors consumed random numbers during weight initialization. This
-    project trains from scratch, so deleting those constructors changed the
-    initial weights of later live modules under the same seed and caused metric
-    drift. We instantiate the removed layers locally, then discard them
-    immediately, so:
-    1. they do not become part of the model/state_dict,
-    2. they do not run in forward,
-    3. later live layers still see the same RNG state as before cleanup.
-    """
-    out_channels = channels
-    reduction = 16
-    window_size = 7
-    group_kernel_sizes = [3, 5, 7, 9]
-    group_chans = channels // 4
-
-    multi_scale_conv = nn.Sequential(
-        nn.Conv2d(channels, out_channels, kernel_size=3, padding=1),
-        nn.Conv2d(channels, out_channels, kernel_size=5, padding=2),
-        nn.Conv2d(channels, out_channels, kernel_size=7, padding=3),
-        nn.Conv2d(channels, out_channels, kernel_size=1),
-        nn.Conv2d(out_channels * 4, out_channels, kernel_size=1),
-        nn.GroupNorm(1, out_channels),
-        nn.ReLU(),
-        nn.AdaptiveAvgPool2d(1),
-        nn.Conv2d(out_channels, out_channels // reduction, kernel_size=1, bias=False),
-        nn.ReLU(),
-        nn.Conv2d(out_channels // reduction, out_channels, kernel_size=1, bias=False),
-        nn.Sigmoid(),
-    )
-
-    scsa = nn.ModuleList([
-        nn.Conv1d(group_chans, group_chans, kernel_size=group_kernel_sizes[0], padding=group_kernel_sizes[0] // 2, groups=group_chans),
-        nn.ModuleList([
-            nn.Conv1d(group_chans, group_chans, kernel_size=size, padding=size // 2, groups=group_chans)
-            for size in group_kernel_sizes[1:]
-        ]),
-        nn.GroupNorm(4, channels),
-        nn.GroupNorm(4, channels),
-        nn.GroupNorm(1, channels),
-        nn.Conv2d(channels, channels, kernel_size=1, bias=False, groups=channels),
-        nn.Conv2d(channels, channels, kernel_size=1, bias=False, groups=channels),
-        nn.Conv2d(channels, channels, kernel_size=1, bias=False, groups=channels),
-        nn.AvgPool2d(kernel_size=(window_size, window_size), stride=window_size),
-    ])
-
-    del multi_scale_conv, scsa
-
-
 class ImprovedSpaMamba(nn.Module):
     def __init__(self, channels, use_residual=True, group_num=4, token_num=4, num_scales=3, num_layers=2,
                  pyramid_dilation=2, ablation='full'):
@@ -361,8 +285,6 @@ class ImprovedSpaMamba(nn.Module):
 
         self.use_spatial_prior = self.ablation not in SPATIAL_PRIOR_DISABLED_ABLATIONS
         if self.use_spatial_prior:
-            # Keep init order numerically aligned with the pre-cleanup model.
-            _consume_removed_spatial_init_rng(channels)
             self.spatial_prior = LightSpatialPrior(channels, group_num=group_num)
         else:
             self.spatial_prior = None
@@ -392,13 +314,9 @@ class ImprovedSpaMamba(nn.Module):
         return x_out + x_prior if self.use_residual else x_out
 
 
-class ConflictSuppressedCCAF(nn.Module):
-    """
-    在 CCAF 基础上加入冲突抑制，只在低冲突通道放大共识项。
-    """
-    def __init__(self, channels, reduction=8):
-        super(ConflictSuppressedCCAF, self).__init__()
-        hidden = max(channels // reduction, 8)
+class CompetitiveFusion(nn.Module):
+    def __init__(self, channels):
+        super(CompetitiveFusion, self).__init__()
         self.fc_spa = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(1),
@@ -409,30 +327,12 @@ class ConflictSuppressedCCAF(nn.Module):
             nn.Flatten(1),
             nn.Linear(channels, channels, bias=False),
         )
-        self.consensus_gate = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(1),
-            nn.Linear(channels, hidden, bias=False),
-            nn.SiLU(),
-            nn.Linear(hidden, channels, bias=False),
-            nn.Sigmoid(),
-        )
-        self.conflict_gate = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(1),
-            nn.Linear(channels, hidden, bias=False),
-            nn.SiLU(),
-            nn.Linear(hidden, channels, bias=False),
-            nn.Sigmoid(),
-        )
-        # 0 初始化，保证训练初期尽量贴近原竞争融合。
-        self.beta = nn.Parameter(torch.zeros(1))
 
     def forward(self, spa_feat, spe_feat):
         assert spa_feat.dim() == 4 and spe_feat.dim() == 4, \
-            'ConflictSuppressedCCAF expects 4D inputs [B, C, H, W].'
+            'CompetitiveFusion expects 4D inputs [B, C, H, W].'
         assert spa_feat.shape == spe_feat.shape, \
-            'ConflictSuppressedCCAF requires spa_feat and spe_feat to have identical shapes.'
+            'CompetitiveFusion requires spa_feat and spe_feat to have identical shapes.'
 
         spa_logit = self.fc_spa(spa_feat)
         spe_logit = self.fc_spe(spe_feat)
@@ -440,15 +340,8 @@ class ConflictSuppressedCCAF(nn.Module):
         w_spa = weights[:, 0, :].unsqueeze(-1).unsqueeze(-1)
         w_spe = weights[:, 1, :].unsqueeze(-1).unsqueeze(-1)
 
-        common_feat = spa_feat * spe_feat
-        g_cons = self.consensus_gate(common_feat).unsqueeze(-1).unsqueeze(-1)
+        return w_spa * spa_feat + w_spe * spe_feat
 
-        diff_feat = torch.abs(spa_feat - spe_feat)
-        g_conflict = self.conflict_gate(diff_feat).unsqueeze(-1).unsqueeze(-1)
-
-        competitive = w_spa * spa_feat + w_spe * spe_feat
-        consensus = g_cons * 0.5 * (spa_feat + spe_feat)
-        return competitive + self.beta * consensus * (1 - g_conflict)
 
 class ImprovedBothMamba(nn.Module):
     def __init__(self, channels, token_num, use_residual, group_num=4, pyramid_dilation=2,
@@ -460,7 +353,6 @@ class ImprovedBothMamba(nn.Module):
         self.use_residual = use_residual
         self.use_spatial_branch = self.ablation not in SPATIAL_BRANCH_DISABLED_ABLATIONS
         self.use_spectral_branch = self.ablation not in SPECTRAL_BRANCH_DISABLED_ABLATIONS
-        self.use_ccaf = self.ablation not in CCAF_DISABLED_ABLATIONS
 
         if self.use_spatial_branch:
             self.spa_mamba = ImprovedSpaMamba(
@@ -479,14 +371,12 @@ class ImprovedBothMamba(nn.Module):
                 token_num=token_num,
                 use_residual=use_residual,
                 group_num=group_num,
-                pyramid_dilation=pyramid_dilation,
-                ablation=ablation,
             )
         else:
             self.spe_mamba = None
 
-        if self.use_ccaf:
-            self.fusion = ConflictSuppressedCCAF(channels, reduction=8)
+        if self.use_spatial_branch and self.use_spectral_branch:
+            self.fusion = CompetitiveFusion(channels)
         else:
             self.fusion = None
 
@@ -509,16 +399,9 @@ class ImprovedBothMamba(nn.Module):
         spa_x = self.spa_mamba(x)
         spe_x = self.spe_mamba(x)
 
-        if self.fusion is None:
-            fusion_x = 0.5 * (spa_x + spe_x)
-        else:
-            fusion_x = self.fusion(spa_x, spe_x)
+        fusion_x = self.fusion(spa_x, spe_x)
         return self._apply_outer_residual(x, fusion_x)
 
-    def get_fusion_beta(self):
-        if self.ablation in C3_ACTIVE_ABLATIONS and self.fusion is not None and hasattr(self.fusion, 'beta'):
-            return self.fusion.beta.detach().item()
-        return None
 
 class ImprovedMambaHSI(nn.Module):
     def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True,
@@ -558,8 +441,3 @@ class ImprovedMambaHSI(nn.Module):
         x = self.patch_embedding(x)
         x_feat = self.mamba(x)
         return self.cls_head(x_feat)
-
-    def get_fusion_beta(self):
-        if len(self.mamba) > 0 and hasattr(self.mamba[0], 'get_fusion_beta'):
-            return self.mamba[0].get_fusion_beta()
-        return None
