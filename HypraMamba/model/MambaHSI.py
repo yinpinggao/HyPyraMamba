@@ -199,7 +199,7 @@ class ImprovedSpeMamba(nn.Module):
         B, C, H, W = x.shape
         if C < self.channel_num:
             pad_c = self.channel_num - C
-            pad_features = torch.zeros((B, pad_c, H, W)).to(x.device)
+            pad_features = x.new_zeros((B, pad_c, H, W))
             cat_features = torch.cat([x, pad_features], dim=1)
             return cat_features
         else:
@@ -209,16 +209,21 @@ class ImprovedSpeMamba(nn.Module):
         # Apply padding to the input if necessary
         x_re = self.padding_feature(x)
 
-        # Flatten the input for Mamba
+        # Treat each spatial location as one spectral token sequence.
         B, C, H, W = x_re.shape
-        x_re_flat = x_re.view(B * H * W, self.token_num, self.group_channel_num)  # Flatten for Mamba
+        origin_c = x.shape[1]
+        x_re_flat = x_re.permute(0, 2, 3, 1).reshape(
+            B * H * W,
+            self.token_num,
+            self.group_channel_num,
+        )
         # Apply Mamba for feature learning
         x_out = self.mamba(x_re_flat)
 
         # Reshape back to original dimensions
-        x_out = x_out.view(B, C, H, W)
+        x_out = x_out.reshape(B, H, W, C).permute(0, 3, 1, 2).contiguous()
         # Apply the final projection to map the feature map to the output space
-        x_out = self.proj(x_out)
+        x_out = self.proj(x_out)[:, :origin_c, :, :]
         # If residual connection is enabled, add the input to the output
         return x_out + x if self.use_residual else x_out
 
