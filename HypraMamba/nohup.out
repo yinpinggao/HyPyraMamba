@@ -1,0 +1,36 @@
+/data2/gyp/HyPyraMamba/HypraMamba/train.py:21: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = GradScaler(enabled=torch.cuda.is_available())
+usage: train.py [-h] [--dataset_index DATASET_INDEX]
+                [--data_set_path DATA_SET_PATH] [--work_dir WORK_DIR]
+                [--lr LR] [--max_epoch MAX_EPOCH]
+                [--train_samples TRAIN_SAMPLES] [--val_samples VAL_SAMPLES]
+                [--exp_name EXP_NAME]
+                [--record_computecost RECORD_COMPUTECOST]
+                [--label_smoothing LABEL_SMOOTHING]
+                [--class_weight_mode {auto,none,balanced}]
+                [--pyramid_dilation PYRAMID_DILATION] [--token_num TOKEN_NUM]
+                [--sdi_k SDI_K] [--sdi_mode {slope,slope_ratio}]
+                [--sdi_pairs SDI_PAIRS] [--sdi_top_m SDI_TOP_M]
+                [--sdi_max_pairs SDI_MAX_PAIRS]
+                [--ablation {full,wo_dgs,wo_lpps,wo_lsp,wo_prca}]
+                [--outer_residual_mode {no_outer,scaled,standard}]
+                [--outer_residual_alpha OUTER_RESIDUAL_ALPHA]
+train.py: error: unrecognized arguments:  
+/data2/gyp/HyPyraMamba/HypraMamba/train.py:21: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = GradScaler(enabled=torch.cuda.is_available())
+usage: train.py [-h] [--dataset_index DATASET_INDEX]
+                [--data_set_path DATA_SET_PATH] [--work_dir WORK_DIR]
+                [--lr LR] [--max_epoch MAX_EPOCH]
+                [--train_samples TRAIN_SAMPLES] [--val_samples VAL_SAMPLES]
+                [--exp_name EXP_NAME]
+                [--record_computecost RECORD_COMPUTECOST]
+                [--label_smoothing LABEL_SMOOTHING]
+                [--class_weight_mode {auto,none,balanced}]
+                [--pyramid_dilation PYRAMID_DILATION] [--token_num TOKEN_NUM]
+                [--sdi_k SDI_K] [--sdi_mode {slope,slope_ratio}]
+                [--sdi_pairs SDI_PAIRS] [--sdi_top_m SDI_TOP_M]
+                [--sdi_max_pairs SDI_MAX_PAIRS]
+                [--ablation {full,wo_dgs,wo_lpps,wo_lsp,wo_prca}]
+                [--outer_residual_mode {no_outer,scaled,standard}]
+                [--outer_residual_alpha OUTER_RESIDUAL_ALPHA]
+train.py: error: unrecognized arguments:  
