@@ -11,11 +11,13 @@ VALID_ABLATIONS = {
     'wo_dgs',
     'wo_lsp',
     'wo_prca',
+    'wo_competitive',
 }
 SPATIAL_BRANCH_DISABLED_ABLATIONS = {'wo_lpps'}
 SPECTRAL_BRANCH_DISABLED_ABLATIONS = {'wo_dgs'}
 SPATIAL_PRIOR_DISABLED_ABLATIONS = {'wo_lsp'}
 SPATIAL_PRCA_DISABLED_ABLATIONS = {'wo_prca'}
+COMPETITIVE_FUSION_DISABLED_ABLATIONS = {'wo_competitive'}
 VALID_OUTER_RESIDUAL_MODES = {'standard', 'no_outer', 'scaled'}
 
 
@@ -175,10 +177,14 @@ class PyramidRefinedChannelAttention(nn.Module):
 
 
 class ImprovedSpeMamba(nn.Module):
-    def __init__(self, channels, token_num=4, use_residual=True, group_num=4):
+    def __init__(self, channels, token_num=4, use_residual=True, group_num=4, difference_scales=(1, 2, 4, 8)):
         super(ImprovedSpeMamba, self).__init__()
         self.token_num = token_num
         self.use_residual = use_residual
+        self.difference_scales = tuple(int(scale) for scale in difference_scales if int(scale) > 0)
+        if len(self.difference_scales) == 0:
+            raise ValueError('difference_scales must contain at least one positive integer.')
+        self.difference_logits = nn.Parameter(torch.zeros(len(self.difference_scales)))
         # Set group_channel_num based on token_num and channels
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
@@ -205,9 +211,23 @@ class ImprovedSpeMamba(nn.Module):
         else:
             return x
 
+    def multi_scale_spectral_difference_enhance(self, x):
+        weights = torch.softmax(self.difference_logits, dim=0)
+        enhanced_diff = x.new_zeros(x.shape)
+
+        for weight, scale in zip(weights, self.difference_scales):
+            diff = x.new_zeros(x.shape)
+            if scale < x.shape[1]:
+                diff[:, :-scale, :, :] = x[:, scale:, :, :] - x[:, :-scale, :, :]
+            enhanced_diff = enhanced_diff + weight * diff
+
+        return x + enhanced_diff
+
     def forward(self, x):
+        # Inject multi-scale spectral variation before grouped tokenization.
+        x_diff = self.multi_scale_spectral_difference_enhance(x)
         # Apply padding to the input if necessary
-        x_re = self.padding_feature(x)
+        x_re = self.padding_feature(x_diff)
 
         # Treat each spatial location as one spectral token sequence.
         B, C, H, W = x_re.shape
@@ -380,7 +400,11 @@ class ImprovedBothMamba(nn.Module):
         else:
             self.spe_mamba = None
 
-        if self.use_spatial_branch and self.use_spectral_branch:
+        if (
+                self.use_spatial_branch
+                and self.use_spectral_branch
+                and self.ablation not in COMPETITIVE_FUSION_DISABLED_ABLATIONS
+        ):
             self.fusion = CompetitiveFusion(channels)
         else:
             self.fusion = None
@@ -404,7 +428,10 @@ class ImprovedBothMamba(nn.Module):
         spa_x = self.spa_mamba(x)
         spe_x = self.spe_mamba(x)
 
-        fusion_x = self.fusion(spa_x, spe_x)
+        if self.fusion is None:
+            fusion_x = 0.5 * (spa_x + spe_x)
+        else:
+            fusion_x = self.fusion(spa_x, spe_x)
         return self._apply_outer_residual(x, fusion_x)
 
 
