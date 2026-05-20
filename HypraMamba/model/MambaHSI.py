@@ -177,14 +177,10 @@ class PyramidRefinedChannelAttention(nn.Module):
 
 
 class ImprovedSpeMamba(nn.Module):
-    def __init__(self, channels, token_num=4, use_residual=True, group_num=4, difference_scales=(1, 2, 4, 8)):
+    def __init__(self, channels, token_num=4, use_residual=True, group_num=4):
         super(ImprovedSpeMamba, self).__init__()
         self.token_num = token_num
         self.use_residual = use_residual
-        self.difference_scales = tuple(int(scale) for scale in difference_scales if int(scale) > 0)
-        if len(self.difference_scales) == 0:
-            raise ValueError('difference_scales must contain at least one positive integer.')
-        self.difference_logits = nn.Parameter(torch.zeros(len(self.difference_scales)))
         # Set group_channel_num based on token_num and channels
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
@@ -211,21 +207,14 @@ class ImprovedSpeMamba(nn.Module):
         else:
             return x
 
-    def multi_scale_spectral_difference_enhance(self, x):
-        weights = torch.softmax(self.difference_logits, dim=0)
-        enhanced_diff = x.new_zeros(x.shape)
-
-        for weight, scale in zip(weights, self.difference_scales):
-            diff = x.new_zeros(x.shape)
-            if scale < x.shape[1]:
-                diff[:, :-scale, :, :] = x[:, scale:, :, :] - x[:, :-scale, :, :]
-            enhanced_diff = enhanced_diff + weight * diff
-
-        return x + enhanced_diff
+    def spectral_difference_enhance(self, x):
+        diff = x.new_zeros(x.shape)
+        diff[:, :-1, :, :] = x[:, 1:, :, :] - x[:, :-1, :, :]
+        return x + diff
 
     def forward(self, x):
-        # Inject multi-scale spectral variation before grouped tokenization.
-        x_diff = self.multi_scale_spectral_difference_enhance(x)
+        # Inject first-order spectral variation before grouped tokenization.
+        x_diff = self.spectral_difference_enhance(x)
         # Apply padding to the input if necessary
         x_re = self.padding_feature(x_diff)
 
