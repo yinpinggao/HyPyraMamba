@@ -11,12 +11,14 @@ VALID_ABLATIONS = {
     'wo_dgs',
     'wo_lsp',
     'wo_prca',
+    'wo_diff',
     'wo_competitive',
 }
 SPATIAL_BRANCH_DISABLED_ABLATIONS = {'wo_lpps'}
 SPECTRAL_BRANCH_DISABLED_ABLATIONS = {'wo_dgs'}
 SPATIAL_PRIOR_DISABLED_ABLATIONS = {'wo_lsp'}
 SPATIAL_PRCA_DISABLED_ABLATIONS = {'wo_prca'}
+SPECTRAL_DIFF_DISABLED_ABLATIONS = {'wo_diff'}
 COMPETITIVE_FUSION_DISABLED_ABLATIONS = {'wo_competitive'}
 VALID_OUTER_RESIDUAL_MODES = {'standard', 'no_outer', 'scaled'}
 
@@ -177,10 +179,12 @@ class PyramidRefinedChannelAttention(nn.Module):
 
 
 class ImprovedSpeMamba(nn.Module):
-    def __init__(self, channels, token_num=4, use_residual=True, group_num=4):
+    def __init__(self, channels, token_num=4, use_residual=True, group_num=4, ablation='full'):
         super(ImprovedSpeMamba, self).__init__()
+        self.ablation = _validate_ablation(ablation)
         self.token_num = token_num
         self.use_residual = use_residual
+        self.use_diff_enhance = self.ablation not in SPECTRAL_DIFF_DISABLED_ABLATIONS
         # Set group_channel_num based on token_num and channels
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
@@ -214,7 +218,7 @@ class ImprovedSpeMamba(nn.Module):
 
     def forward(self, x):
         # Inject first-order spectral variation before grouped tokenization.
-        x_diff = self.spectral_difference_enhance(x)
+        x_diff = self.spectral_difference_enhance(x) if self.use_diff_enhance else x
         # Apply padding to the input if necessary
         x_re = self.padding_feature(x_diff)
 
@@ -233,8 +237,8 @@ class ImprovedSpeMamba(nn.Module):
         x_out = x_out.reshape(B, H, W, C).permute(0, 3, 1, 2).contiguous()
         # Apply the final projection to map the feature map to the output space
         x_out = self.proj(x_out)[:, :origin_c, :, :]
-        # If residual connection is enabled, add the input to the output
-        return x_out + x if self.use_residual else x_out
+        # Use the differential feature as the spectral residual to match DGS-Mamba.
+        return x_out + x_diff if self.use_residual else x_out
 
 
 class LightSpatialPrior(nn.Module):
@@ -385,6 +389,7 @@ class ImprovedBothMamba(nn.Module):
                 token_num=token_num,
                 use_residual=use_residual,
                 group_num=group_num,
+                ablation=ablation,
             )
         else:
             self.spe_mamba = None

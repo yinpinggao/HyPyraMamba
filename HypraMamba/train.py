@@ -9,9 +9,11 @@ from utils.Loss import head_loss, resize
 from utils.evaluation import Evaluator
 from utils.HSICommonUtils import ImageStretching
 from utils.setup_logger import setup_logger
-from utils.visual_predict import visualize_predict
 from model.MambaHSI import ImprovedMambaHSI as MambaHSI, VALID_ABLATIONS, VALID_OUTER_RESIDUAL_MODES
-from calflops import calculate_flops
+try:
+    from calflops import calculate_flops
+except ImportError:
+    calculate_flops = None
 from sklearn.decomposition import PCA
 from scipy.ndimage import gaussian_filter
 from torch.cuda.amp import autocast, GradScaler
@@ -23,6 +25,8 @@ FUSION_NAME = 'competitive'
 
 
 def vis_a_image(gt_vis, pred_vis, save_single_predict_path, save_single_gt_path, only_vis_label=False):
+    from utils.visual_predict import visualize_predict
+
     visualize_predict(gt_vis, pred_vis, save_single_predict_path, save_single_gt_path, only_vis_label=only_vis_label)
     visualize_predict(gt_vis, pred_vis, save_single_predict_path.replace('.png', '_mask.png'), save_single_gt_path, only_vis_label=True)
 
@@ -49,6 +53,17 @@ def compute_balanced_class_weights(train_label, class_count, target_device):
 
     return class_weights.to(target_device), class_counts.long().tolist()
 
+def str2bool(value):
+    if isinstance(value, bool):
+        return value
+    value = value.lower()
+    if value in ('true', '1', 'yes', 'y'):
+        return True
+    if value in ('false', '0', 'no', 'n'):
+        return False
+    raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_index', type=int, default=8)
@@ -60,7 +75,8 @@ def get_parser():
     parser.add_argument('--train_samples', type=int, default=30)
     parser.add_argument('--val_samples', type=int, default=10)
     parser.add_argument('--exp_name', type=str, default='RUNS')
-    parser.add_argument('--record_computecost', type=bool, default=False)
+    parser.add_argument('--record_computecost', type=str2bool, default=False)
+    parser.add_argument('--save_vis', type=str2bool, default=False)
     parser.add_argument('--label_smoothing', type=float, default=0.05)
     parser.add_argument('--class_weight_mode', type=str, default='none', choices=['auto', 'none', 'balanced'])
     parser.add_argument('--pyramid_dilation', type=str, default='3')
@@ -127,6 +143,7 @@ paras_dict = {
     'pyramid_dilation': pyramid_dilation,
     'outer_residual_mode': args.outer_residual_mode,
     'outer_residual_alpha': args.outer_residual_alpha,
+    'save_vis': args.save_vis,
 }
 
 transform = transforms.Compose([
@@ -137,6 +154,12 @@ transform = transforms.Compose([
 def compute_train_loss(net, input_tensor, label_tensor, loss_func):
     pred = net(input_tensor)
     return head_loss(loss_func, pred, label_tensor.long())
+
+
+def count_parameters(model):
+    total_params = sum(param.numel() for param in model.parameters())
+    trainable_params = sum(param.numel() for param in model.parameters() if param.requires_grad)
+    return total_params, trainable_params
 
 
 def get_fusion_status(model):
@@ -181,6 +204,8 @@ if __name__ == '__main__':
     EACH_ACC_ALL = []
     Train_Time_ALL = []
     Test_Time_ALL = []
+    total_params_m = None
+    trainable_params_m = None
     evaluator = Evaluator(num_class=class_count)
 
     for exp_idx, curr_seed in enumerate(seed_list):
@@ -248,13 +273,22 @@ if __name__ == '__main__':
         optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate, weight_decay=1e-5)
 
         logger.info(optimizer)
+        total_params, trainable_params = count_parameters(net)
+        total_params_m = total_params / 1e6
+        trainable_params_m = trainable_params / 1e6
+        logger.info('Paras(M): {:.6f}'.format(total_params_m))
+        logger.info('Trainable Paras(M): {:.6f}'.format(trainable_params_m))
         if record_computecost:
             net.eval()
             torch.cuda.empty_cache()
 
-            flops, macs1, para = calculate_flops(model=net, input_shape=(1, x.shape[1], x.shape[2], x.shape[3]))
-
-            logger.info("para:{}\n,flops:{}".format(para, flops))
+            if calculate_flops is None:
+                logger.warning('calflops is not installed; FLOPs(G) is unavailable.')
+            else:
+                flops, macs1, para = calculate_flops(model=net, input_shape=(1, x.shape[1], x.shape[2], x.shape[3]))
+                logger.info('calflops para: {}'.format(para))
+                logger.info('calflops flops: {}'.format(flops))
+                logger.info('FLOPs are tool estimates; verify Mamba custom ops support before reporting them.')
 
         tic1 = time.perf_counter()
         best_val_acc = 0
@@ -380,7 +414,7 @@ if __name__ == '__main__':
                     best_val_acc = OA
                     torch.save(net.state_dict(), save_weight_path)
 
-                if (epoch + 1) % 50 == 0:
+                if args.save_vis and (epoch + 1) % 50 == 0:
                     save_single_predict_path = os.path.join(save_vis_folder, 'predict_{}.png'.format(str(epoch + 1)))
                     save_single_gt_path = os.path.join(save_vis_folder, 'gt.png')
                     vis_a_image(gt, predict, save_single_predict_path, save_single_gt_path)
@@ -425,9 +459,10 @@ if __name__ == '__main__':
             mAcc_test, Acc_test = test_evaluator.Pixel_Accuracy_Class()
             Kappa_test = test_evaluator.Kappa()
             logger.info('Test {}|OA:{}|MACC:{}|Kappa:{}|MIOU:{}|IOU:{}|ACC:{}'.format(epoch, OA_test, mAcc_test, Kappa_test, mIOU_test, IOU_test, Acc_test))
-            vis_a_image(gt, predict_test, predict_save_path, gt_save_path)
         toc2 = time.perf_counter()  # 记录结束时间
         test_time = toc2 - tic2
+        if args.save_vis:
+            vis_a_image(gt, predict_test, predict_save_path, gt_save_path)
 
         str_results = '\n======================' \
                       + " exp_idx=" + str(exp_idx) \
@@ -442,7 +477,9 @@ if __name__ == '__main__':
                       + '\nkpp=' + str(Kappa_test) \
                       + '\nmIOU_test:' + str(mIOU_test) \
                       + "\nIOU_test:" + str(IOU_test) \
-                      + "\nAcc_test:" + str(Acc_test) + "\n"
+                      + "\nAcc_test:" + str(Acc_test) \
+                      + "\nTrain time(s)=" + str(train_time) \
+                      + "\nTest time(s)=" + str(test_time) + "\n"
         logger.info(str_results)
         with open(results_save_path, 'a+') as f:
             f.write(str_results)
@@ -484,18 +521,22 @@ if __name__ == '__main__':
         logger.warning("Train_Time_ALL 为空，训练时间无法计算，使用默认值 0。")
 
     if len(Test_Time_ALL) > 0:
-        avg_test_time = np.mean(Test_Time_ALL) * 1000
-        std_test_time = np.std(Test_Time_ALL) * 1000
+        avg_test_time = np.mean(Test_Time_ALL)
+        std_test_time = np.std(Test_Time_ALL)
     else:
         avg_test_time, std_test_time = 0, 0
         logger.warning("Test_Time_ALL 为空，测试时间无法计算，使用默认值 0。")
 
-    logger.info('Average training time: {:.2f} ± {:.3f}'.format(avg_train_time, std_train_time))
-    logger.info('Average testing time: {:.2f} ± {:.3f}'.format(avg_test_time, std_test_time))
+    logger.info('Paras(M): {:.6f}'.format(total_params_m))
+    logger.info('Trainable Paras(M): {:.6f}'.format(trainable_params_m))
+    logger.info('Average training time(s): {:.2f} ± {:.3f}'.format(avg_train_time, std_train_time))
+    logger.info('Average testing time(s): {:.2f} ± {:.3f}'.format(avg_test_time, std_test_time))
 
     mean_result_path = os.path.join(save_folder, 'mean_result.txt')
     with open(mean_result_path, 'w') as f:
         str_results = '\n\n***************Mean result of ' + str(len(seed_list)) + ' times runs ********************' \
+                      + '\nParas(M)=' + str(round(total_params_m, 6)) \
+                      + '\nTrainable Paras(M)=' + str(round(trainable_params_m, 6)) \
                       + '\nList of OA:' + str(list(OA_ALL)) \
                       + '\nList of AA:' + str(list(AA_ALL)) \
                       + '\nList of KPP:' + str(list(KPP_ALL)) \
@@ -504,10 +545,10 @@ if __name__ == '__main__':
                       + '\nKpp=' + str(round(np.mean(KPP_ALL) * 100, 2)) + '+-' + str(round(np.std(KPP_ALL) * 100, 2)) \
                       + '\nAcc per class=\n' + str(np.round(np.mean(EACH_ACC_ALL, 0) * 100, 2)) + '+-' + str(
             np.round(np.std(EACH_ACC_ALL, 0) * 100, 2)) \
-                      + "\nAverage training time=" + str(np.round(np.mean(Train_Time_ALL), decimals=2)) + '+-' + str(
+                      + "\nAverage training time(s)=" + str(np.round(np.mean(Train_Time_ALL), decimals=2)) + '+-' + str(
             np.round(np.std(Train_Time_ALL), decimals=3)) \
-                      + "\nAverage testing time=" + str(np.round(np.mean(Test_Time_ALL) * 1000, decimals=2)) + '+-' + str(
-            np.round(np.std(Test_Time_ALL) * 100, decimals=3))
+                      + "\nAverage testing time(s)=" + str(np.round(np.mean(Test_Time_ALL), decimals=2)) + '+-' + str(
+            np.round(np.std(Test_Time_ALL), decimals=3))
         f.write(str_results)
 
     del net
