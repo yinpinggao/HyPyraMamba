@@ -83,6 +83,7 @@ def get_parser():
     parser.add_argument('--ablation', type=str, default='full', choices=sorted(VALID_ABLATIONS))
     parser.add_argument('--outer_residual_mode', type=str, default='standard', choices=sorted(VALID_OUTER_RESIDUAL_MODES))
     parser.add_argument('--outer_residual_alpha', type=float, default=1.0)
+    parser.add_argument('--spectral_diff_alpha', type=float, default=0.5)
 
     args = parser.parse_args()
     return args
@@ -114,6 +115,8 @@ else:
     outer_residual_tag = 'outer_alpha{}'.format(format_float_for_name(args.outer_residual_alpha))
 
 save_net_base = base_save_net_name if outer_residual_tag == '' else '{}_{}'.format(base_save_net_name, outer_residual_tag)
+if args.spectral_diff_alpha != 1.0:
+    save_net_base = '{}_diff_alpha{}'.format(save_net_base, format_float_for_name(args.spectral_diff_alpha))
 save_net_name = save_net_base if args.ablation == 'full' else '{}_{}'.format(save_net_base, args.ablation)
 data_set_name_list = ['UP', 'HanChuan', 'HongHu', 'Houston','LongKou','Salinas','indian','Botswana','XuZhou','Pavia']
 data_set_name = data_set_name_list[dataset_index]
@@ -143,6 +146,7 @@ paras_dict = {
     'pyramid_dilation': pyramid_dilation,
     'outer_residual_mode': args.outer_residual_mode,
     'outer_residual_alpha': args.outer_residual_alpha,
+    'spectral_diff_alpha': args.spectral_diff_alpha,
     'save_vis': args.save_vis,
 }
 
@@ -243,6 +247,7 @@ if __name__ == '__main__':
             ablation=args.ablation,
             outer_residual_mode=args.outer_residual_mode,
             outer_residual_alpha=args.outer_residual_alpha,
+            spectral_diff_alpha=args.spectral_diff_alpha,
         )
 
         logger.info(paras_dict)
@@ -436,6 +441,7 @@ if __name__ == '__main__':
             ablation=args.ablation,
             outer_residual_mode=args.outer_residual_mode,
             outer_residual_alpha=args.outer_residual_alpha,
+            spectral_diff_alpha=args.spectral_diff_alpha,
         )
         best_net.to(device)
         best_net.load_state_dict(torch.load(load_weight_path))

@@ -179,12 +179,14 @@ class PyramidRefinedChannelAttention(nn.Module):
 
 
 class ImprovedSpeMamba(nn.Module):
-    def __init__(self, channels, token_num=4, use_residual=True, group_num=4, ablation='full'):
+    def __init__(self, channels, token_num=4, use_residual=True, group_num=4,
+                 ablation='full', spectral_diff_alpha=1.0):
         super(ImprovedSpeMamba, self).__init__()
         self.ablation = _validate_ablation(ablation)
         self.token_num = token_num
         self.use_residual = use_residual
         self.use_diff_enhance = self.ablation not in SPECTRAL_DIFF_DISABLED_ABLATIONS
+        self.spectral_diff_alpha = float(spectral_diff_alpha)
         # Set group_channel_num based on token_num and channels
         self.group_channel_num = math.ceil(channels / token_num)
         self.channel_num = self.token_num * self.group_channel_num
@@ -214,7 +216,7 @@ class ImprovedSpeMamba(nn.Module):
     def spectral_difference_enhance(self, x):
         diff = x.new_zeros(x.shape)
         diff[:, :-1, :, :] = x[:, 1:, :, :] - x[:, :-1, :, :]
-        return x + diff
+        return x + self.spectral_diff_alpha * diff
 
     def forward(self, x):
         # Inject first-order spectral variation before grouped tokenization.
@@ -363,7 +365,8 @@ class CompetitiveFusion(nn.Module):
 
 class ImprovedBothMamba(nn.Module):
     def __init__(self, channels, token_num, use_residual, group_num=4, pyramid_dilation=2,
-                 ablation='full', outer_residual_mode='standard', outer_residual_alpha=1.0):
+                 ablation='full', outer_residual_mode='standard', outer_residual_alpha=1.0,
+                 spectral_diff_alpha=1.0):
         super(ImprovedBothMamba, self).__init__()
         self.ablation = _validate_ablation(ablation)
         self.outer_residual_mode = _validate_outer_residual_mode(outer_residual_mode)
@@ -390,6 +393,7 @@ class ImprovedBothMamba(nn.Module):
                 use_residual=use_residual,
                 group_num=group_num,
                 ablation=ablation,
+                spectral_diff_alpha=spectral_diff_alpha,
             )
         else:
             self.spe_mamba = None
@@ -432,7 +436,8 @@ class ImprovedBothMamba(nn.Module):
 class ImprovedMambaHSI(nn.Module):
     def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True,
                  token_num=4, group_num=4, pyramid_dilation=(2, 3), ablation='full',
-                 outer_residual_mode='standard', outer_residual_alpha=1.0):
+                 outer_residual_mode='standard', outer_residual_alpha=1.0,
+                 spectral_diff_alpha=1.0):
         super(ImprovedMambaHSI, self).__init__()
         self.ablation = _validate_ablation(ablation)
 
@@ -452,6 +457,7 @@ class ImprovedMambaHSI(nn.Module):
                 ablation=ablation,
                 outer_residual_mode=outer_residual_mode,
                 outer_residual_alpha=outer_residual_alpha,
+                spectral_diff_alpha=spectral_diff_alpha,
             ),
             nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
         )
