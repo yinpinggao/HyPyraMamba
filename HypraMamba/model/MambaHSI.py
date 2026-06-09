@@ -51,6 +51,54 @@ def _normalize_dilations(dilation):
     return dilations
 
 
+def _validate_positive_int(name, value):
+    if int(value) != value or int(value) <= 0:
+        raise ValueError('{} must be a positive integer, got {}.'.format(name, value))
+    return int(value)
+
+
+def _validate_model_config(
+        hidden_dim,
+        token_num,
+        group_num,
+        prca_num_heads,
+        prca_num_scales,
+        prca_num_layers,
+        pool_size,
+        cls_head_dim,
+        lsp_reduction,
+        spa_mamba_d_state,
+        spa_mamba_d_conv,
+        spa_mamba_expand,
+        spe_mamba_d_state,
+        spe_mamba_d_conv,
+        spe_mamba_expand):
+    hidden_dim = _validate_positive_int('hidden_dim', hidden_dim)
+    token_num = _validate_positive_int('token_num', token_num)
+    group_num = _validate_positive_int('group_num', group_num)
+    prca_num_heads = _validate_positive_int('prca_num_heads', prca_num_heads)
+    prca_num_scales = _validate_positive_int('prca_num_scales', prca_num_scales)
+    prca_num_layers = _validate_positive_int('prca_num_layers', prca_num_layers)
+    pool_size = _validate_positive_int('pool_size', pool_size)
+    cls_head_dim = _validate_positive_int('cls_head_dim', cls_head_dim)
+    lsp_reduction = _validate_positive_int('lsp_reduction', lsp_reduction)
+    spa_mamba_d_state = _validate_positive_int('spa_mamba_d_state', spa_mamba_d_state)
+    spa_mamba_d_conv = _validate_positive_int('spa_mamba_d_conv', spa_mamba_d_conv)
+    spa_mamba_expand = _validate_positive_int('spa_mamba_expand', spa_mamba_expand)
+    spe_mamba_d_state = _validate_positive_int('spe_mamba_d_state', spe_mamba_d_state)
+    spe_mamba_d_conv = _validate_positive_int('spe_mamba_d_conv', spe_mamba_d_conv)
+    spe_mamba_expand = _validate_positive_int('spe_mamba_expand', spe_mamba_expand)
+
+    if hidden_dim % group_num != 0:
+        raise ValueError('hidden_dim must be divisible by group_num.')
+    if cls_head_dim % group_num != 0:
+        raise ValueError('cls_head_dim must be divisible by group_num.')
+    if hidden_dim % token_num != 0:
+        raise ValueError('hidden_dim must be divisible by token_num.')
+    if hidden_dim % prca_num_heads != 0:
+        raise ValueError('hidden_dim must be divisible by prca_num_heads.')
+
+
 class PyramidAttention(nn.Module):
     def __init__(self, dim, num_heads, bias, dilation=2):
         super(PyramidAttention, self).__init__()
@@ -180,7 +228,8 @@ class PyramidRefinedChannelAttention(nn.Module):
 
 class ImprovedSpeMamba(nn.Module):
     def __init__(self, channels, token_num=4, use_residual=True, group_num=4,
-                 ablation='full', spectral_diff_alpha=1.0):
+                 ablation='full', spectral_diff_alpha=1.0, mamba_d_state=16,
+                 mamba_d_conv=4, mamba_expand=2):
         super(ImprovedSpeMamba, self).__init__()
         self.ablation = _validate_ablation(ablation)
         self.token_num = token_num
@@ -193,9 +242,9 @@ class ImprovedSpeMamba(nn.Module):
         # Initialize Mamba module for feature learning
         self.mamba = Mamba(
             d_model=self.group_channel_num,
-            d_state=16,
-            d_conv=4,
-            expand=2,
+            d_state=mamba_d_state,
+            d_conv=mamba_d_conv,
+            expand=mamba_expand,
         )
         # Projection layer to project the concatenated feature maps to the output
         self.proj = nn.Sequential(
@@ -276,7 +325,8 @@ class LightSpatialPrior(nn.Module):
 
 class ImprovedSpaMamba(nn.Module):
     def __init__(self, channels, use_residual=True, group_num=4, token_num=4, num_scales=3, num_layers=2,
-                 pyramid_dilation=2, ablation='full'):
+                 num_heads=4, pyramid_dilation=2, ablation='full', lsp_reduction=4,
+                 mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super(ImprovedSpaMamba, self).__init__()
         self.ablation = _validate_ablation(ablation)
         self.use_residual = use_residual
@@ -287,7 +337,7 @@ class ImprovedSpaMamba(nn.Module):
         if self.use_prca:
             self.pyramid_refined_attention = PyramidRefinedChannelAttention(
                 dim=self.channel_num,
-                num_heads=4,
+                num_heads=num_heads,
                 bias=True,
                 num_scales=num_scales,
                 num_layers=num_layers,
@@ -298,14 +348,14 @@ class ImprovedSpaMamba(nn.Module):
 
         self.mamba = Mamba(
             d_model=channels,
-            d_state=16,
-            d_conv=4,
-            expand=2,
+            d_state=mamba_d_state,
+            d_conv=mamba_d_conv,
+            expand=mamba_expand,
         )
 
         self.use_spatial_prior = self.ablation not in SPATIAL_PRIOR_DISABLED_ABLATIONS
         if self.use_spatial_prior:
-            self.spatial_prior = LightSpatialPrior(channels, group_num=group_num)
+            self.spatial_prior = LightSpatialPrior(channels, group_num=group_num, reduction=lsp_reduction)
         else:
             self.spatial_prior = None
 
@@ -366,7 +416,10 @@ class CompetitiveFusion(nn.Module):
 class ImprovedBothMamba(nn.Module):
     def __init__(self, channels, token_num, use_residual, group_num=4, pyramid_dilation=2,
                  ablation='full', outer_residual_mode='standard', outer_residual_alpha=1.0,
-                 spectral_diff_alpha=1.0):
+                 spectral_diff_alpha=1.0, prca_num_scales=3, prca_num_layers=2,
+                 prca_num_heads=4, lsp_reduction=4, spa_mamba_d_state=16,
+                 spa_mamba_d_conv=4, spa_mamba_expand=2, spe_mamba_d_state=16,
+                 spe_mamba_d_conv=4, spe_mamba_expand=2):
         super(ImprovedBothMamba, self).__init__()
         self.ablation = _validate_ablation(ablation)
         self.outer_residual_mode = _validate_outer_residual_mode(outer_residual_mode)
@@ -381,7 +434,14 @@ class ImprovedBothMamba(nn.Module):
                 use_residual=use_residual,
                 group_num=group_num,
                 pyramid_dilation=pyramid_dilation,
+                num_scales=prca_num_scales,
+                num_layers=prca_num_layers,
+                num_heads=prca_num_heads,
                 ablation=ablation,
+                lsp_reduction=lsp_reduction,
+                mamba_d_state=spa_mamba_d_state,
+                mamba_d_conv=spa_mamba_d_conv,
+                mamba_expand=spa_mamba_expand,
             )
         else:
             self.spa_mamba = None
@@ -394,6 +454,9 @@ class ImprovedBothMamba(nn.Module):
                 group_num=group_num,
                 ablation=ablation,
                 spectral_diff_alpha=spectral_diff_alpha,
+                mamba_d_state=spe_mamba_d_state,
+                mamba_d_conv=spe_mamba_d_conv,
+                mamba_expand=spe_mamba_expand,
             )
         else:
             self.spe_mamba = None
@@ -437,9 +500,30 @@ class ImprovedMambaHSI(nn.Module):
     def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True,
                  token_num=4, group_num=4, pyramid_dilation=(2, 3), ablation='full',
                  outer_residual_mode='standard', outer_residual_alpha=1.0,
-                 spectral_diff_alpha=1.0):
+                 spectral_diff_alpha=1.0, pool_size=2, cls_head_dim=128,
+                 prca_num_scales=3, prca_num_layers=2, prca_num_heads=4,
+                 lsp_reduction=4, spa_mamba_d_state=16, spa_mamba_d_conv=4,
+                 spa_mamba_expand=2, spe_mamba_d_state=16, spe_mamba_d_conv=4,
+                 spe_mamba_expand=2):
         super(ImprovedMambaHSI, self).__init__()
         self.ablation = _validate_ablation(ablation)
+        _validate_model_config(
+            hidden_dim=hidden_dim,
+            token_num=token_num,
+            group_num=group_num,
+            prca_num_heads=prca_num_heads,
+            prca_num_scales=prca_num_scales,
+            prca_num_layers=prca_num_layers,
+            pool_size=pool_size,
+            cls_head_dim=cls_head_dim,
+            lsp_reduction=lsp_reduction,
+            spa_mamba_d_state=spa_mamba_d_state,
+            spa_mamba_d_conv=spa_mamba_d_conv,
+            spa_mamba_expand=spa_mamba_expand,
+            spe_mamba_d_state=spe_mamba_d_state,
+            spe_mamba_d_conv=spe_mamba_d_conv,
+            spe_mamba_expand=spe_mamba_expand,
+        )
 
         self.patch_embedding = nn.Sequential(
             nn.Conv2d(in_channels=in_channels, out_channels=hidden_dim, kernel_size=1, stride=1, padding=0),
@@ -458,15 +542,25 @@ class ImprovedMambaHSI(nn.Module):
                 outer_residual_mode=outer_residual_mode,
                 outer_residual_alpha=outer_residual_alpha,
                 spectral_diff_alpha=spectral_diff_alpha,
+                prca_num_scales=prca_num_scales,
+                prca_num_layers=prca_num_layers,
+                prca_num_heads=prca_num_heads,
+                lsp_reduction=lsp_reduction,
+                spa_mamba_d_state=spa_mamba_d_state,
+                spa_mamba_d_conv=spa_mamba_d_conv,
+                spa_mamba_expand=spa_mamba_expand,
+                spe_mamba_d_state=spe_mamba_d_state,
+                spe_mamba_d_conv=spe_mamba_d_conv,
+                spe_mamba_expand=spe_mamba_expand,
             ),
-            nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
+            nn.AvgPool2d(kernel_size=pool_size, stride=pool_size, padding=0),
         )
 
         self.cls_head = nn.Sequential(
-            nn.Conv2d(in_channels=hidden_dim, out_channels=128, kernel_size=1, stride=1, padding=0),
-            nn.GroupNorm(group_num, 128),
+            nn.Conv2d(in_channels=hidden_dim, out_channels=cls_head_dim, kernel_size=1, stride=1, padding=0),
+            nn.GroupNorm(group_num, cls_head_dim),
             nn.SiLU(),
-            nn.Conv2d(in_channels=128, out_channels=num_classes, kernel_size=1, stride=1, padding=0)
+            nn.Conv2d(in_channels=cls_head_dim, out_channels=num_classes, kernel_size=1, stride=1, padding=0)
         )
 
     def forward(self, x):

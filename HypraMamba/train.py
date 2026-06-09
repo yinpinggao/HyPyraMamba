@@ -64,6 +64,59 @@ def str2bool(value):
     raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
+def parse_int_list(value):
+    if isinstance(value, list):
+        return value
+    try:
+        values = [int(item.strip()) for item in value.split(',') if item.strip()]
+    except ValueError:
+        raise argparse.ArgumentTypeError('Expected a comma-separated integer list.')
+    if len(values) == 0:
+        raise argparse.ArgumentTypeError('Expected at least one integer.')
+    return values
+
+
+def validate_args(args, parser):
+    positive_int_fields = [
+        'pca_components',
+        'hidden_dim',
+        'token_num',
+        'group_num',
+        'pool_size',
+        'cls_head_dim',
+        'prca_num_scales',
+        'prca_num_layers',
+        'prca_num_heads',
+        'lsp_reduction',
+        'spa_mamba_d_state',
+        'spa_mamba_d_conv',
+        'spa_mamba_expand',
+        'spe_mamba_d_state',
+        'spe_mamba_d_conv',
+        'spe_mamba_expand',
+    ]
+    for field in positive_int_fields:
+        if getattr(args, field) <= 0:
+            parser.error('--{} must be a positive integer.'.format(field))
+
+    if args.weight_decay < 0:
+        parser.error('--weight_decay must be non-negative.')
+    if args.gaussian_sigma < 0:
+        parser.error('--gaussian_sigma must be non-negative.')
+    if args.stretch_low < 0 or args.stretch_high > 100:
+        parser.error('--stretch_low and --stretch_high must be within [0, 100].')
+    if args.hidden_dim % args.group_num != 0:
+        parser.error('--hidden_dim must be divisible by --group_num.')
+    if args.cls_head_dim % args.group_num != 0:
+        parser.error('--cls_head_dim must be divisible by --group_num.')
+    if args.hidden_dim % args.token_num != 0:
+        parser.error('--hidden_dim must be divisible by --token_num.')
+    if args.hidden_dim % args.prca_num_heads != 0:
+        parser.error('--hidden_dim must be divisible by --prca_num_heads.')
+    if args.stretch_high <= args.stretch_low:
+        parser.error('--stretch_high must be greater than --stretch_low.')
+
+
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_index', type=int, default=8)
@@ -71,14 +124,36 @@ def get_parser():
     parser.add_argument('--work_dir', type=str, default='./')
 
     parser.add_argument('--lr', type=float, default=0.0003)
+    parser.add_argument('--weight_decay', type=float, default=1e-5)
     parser.add_argument('--max_epoch', type=int, default=200)
     parser.add_argument('--train_samples', type=int, default=30)
     parser.add_argument('--val_samples', type=int, default=10)
+    parser.add_argument('--seed_list', type=parse_int_list, default=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
     parser.add_argument('--exp_name', type=str, default='RUNS')
     parser.add_argument('--record_computecost', type=str2bool, default=False)
     parser.add_argument('--save_vis', type=str2bool, default=False)
     parser.add_argument('--label_smoothing', type=float, default=0.05)
-    parser.add_argument('--class_weight_mode', type=str, default='none', choices=['auto', 'none', 'balanced'])
+    parser.add_argument('--class_weight_mode', type=str, default='balanced', choices=['auto', 'none', 'balanced'])
+    parser.add_argument('--pca_components', type=int, default=30)
+    parser.add_argument('--gaussian_sigma', type=float, default=1.0)
+    parser.add_argument('--stretch_low', type=float, default=2.0)
+    parser.add_argument('--stretch_high', type=float, default=98.0)
+    parser.add_argument('--hidden_dim', type=int, default=128)
+    parser.add_argument('--token_num', type=int, default=4)
+    parser.add_argument('--group_num', type=int, default=4)
+    parser.add_argument('--use_residual', type=str2bool, default=True)
+    parser.add_argument('--pool_size', type=int, default=2)
+    parser.add_argument('--cls_head_dim', type=int, default=128)
+    parser.add_argument('--prca_num_scales', type=int, default=3)
+    parser.add_argument('--prca_num_layers', type=int, default=2)
+    parser.add_argument('--prca_num_heads', type=int, default=4)
+    parser.add_argument('--lsp_reduction', type=int, default=4)
+    parser.add_argument('--spa_mamba_d_state', type=int, default=16)
+    parser.add_argument('--spa_mamba_d_conv', type=int, default=4)
+    parser.add_argument('--spa_mamba_expand', type=int, default=2)
+    parser.add_argument('--spe_mamba_d_state', type=int, default=16)
+    parser.add_argument('--spe_mamba_d_conv', type=int, default=4)
+    parser.add_argument('--spe_mamba_expand', type=int, default=2)
     parser.add_argument('--pyramid_dilation', type=str, default='3')
     parser.add_argument('--ablation', type=str, default='full', choices=sorted(VALID_ABLATIONS))
     parser.add_argument('--outer_residual_mode', type=str, default='standard', choices=sorted(VALID_OUTER_RESIDUAL_MODES))
@@ -86,14 +161,14 @@ def get_parser():
     parser.add_argument('--spectral_diff_alpha', type=float, default=0.5)
 
     args = parser.parse_args()
+    validate_args(args, parser)
     return args
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 args \
     = get_parser()
 record_computecost = args.record_computecost
-#seed_list = [0, 1, 2, 3]
-seed_list = [0, 1, 2, 3, 4, 5 , 6, 7, 8, 9]
+seed_list = args.seed_list
 num_list = [args.train_samples, args.val_samples]
 
 dataset_index = args.dataset_index
@@ -138,16 +213,61 @@ paras_dict = {
     'dataset_index': dataset_index,
     'num_list': num_list,
     'lr': learning_rate,
+    'weight_decay': args.weight_decay,
     'seed_list': seed_list,
     'label_smoothing': label_smoothing,
     'fusion_mode': FUSION_NAME,
     'ablation': args.ablation,
     'class_weight_mode': class_weight_mode,
+    'pca_components': args.pca_components,
+    'gaussian_sigma': args.gaussian_sigma,
+    'stretch_low': args.stretch_low,
+    'stretch_high': args.stretch_high,
+    'hidden_dim': args.hidden_dim,
+    'token_num': args.token_num,
+    'group_num': args.group_num,
+    'use_residual': args.use_residual,
+    'pool_size': args.pool_size,
+    'cls_head_dim': args.cls_head_dim,
+    'prca_num_scales': args.prca_num_scales,
+    'prca_num_layers': args.prca_num_layers,
+    'prca_num_heads': args.prca_num_heads,
+    'lsp_reduction': args.lsp_reduction,
+    'spa_mamba_d_state': args.spa_mamba_d_state,
+    'spa_mamba_d_conv': args.spa_mamba_d_conv,
+    'spa_mamba_expand': args.spa_mamba_expand,
+    'spe_mamba_d_state': args.spe_mamba_d_state,
+    'spe_mamba_d_conv': args.spe_mamba_d_conv,
+    'spe_mamba_expand': args.spe_mamba_expand,
     'pyramid_dilation': pyramid_dilation,
     'outer_residual_mode': args.outer_residual_mode,
     'outer_residual_alpha': args.outer_residual_alpha,
     'spectral_diff_alpha': args.spectral_diff_alpha,
     'save_vis': args.save_vis,
+}
+
+model_kwargs = {
+    'hidden_dim': args.hidden_dim,
+    'token_num': args.token_num,
+    'group_num': args.group_num,
+    'use_residual': args.use_residual,
+    'pyramid_dilation': pyramid_dilation,
+    'ablation': args.ablation,
+    'outer_residual_mode': args.outer_residual_mode,
+    'outer_residual_alpha': args.outer_residual_alpha,
+    'spectral_diff_alpha': args.spectral_diff_alpha,
+    'pool_size': args.pool_size,
+    'cls_head_dim': args.cls_head_dim,
+    'prca_num_scales': args.prca_num_scales,
+    'prca_num_layers': args.prca_num_layers,
+    'prca_num_heads': args.prca_num_heads,
+    'lsp_reduction': args.lsp_reduction,
+    'spa_mamba_d_state': args.spa_mamba_d_state,
+    'spa_mamba_d_conv': args.spa_mamba_d_conv,
+    'spa_mamba_expand': args.spa_mamba_expand,
+    'spe_mamba_d_state': args.spe_mamba_d_state,
+    'spe_mamba_d_conv': args.spe_mamba_d_conv,
+    'spe_mamba_expand': args.spe_mamba_expand,
 }
 
 transform = transforms.Compose([
@@ -188,16 +308,19 @@ if __name__ == '__main__':
 
     data, gt = data_load_operate.load_data(data_set_name, data_set_path)
 
-    data_filtered = gaussian_filter(data, sigma=1)
+    if args.pca_components > data.shape[2]:
+        raise ValueError('--pca_components must be <= input channel count {}.'.format(data.shape[2]))
 
-    pca = PCA(n_components=30)
+    data_filtered = gaussian_filter(data, sigma=args.gaussian_sigma)
+
+    pca = PCA(n_components=args.pca_components)
     data_reshaped = data_filtered.reshape(-1, data_filtered.shape[2])
     data_pca = pca.fit_transform(data_reshaped)
     data_pca = data_pca.reshape(data_filtered.shape[0], data_filtered.shape[1], -1)
 
     height, width, channels = data_pca.shape
     gt_reshape = gt.reshape(-1)
-    img = ImageStretching(data_pca)
+    img = ImageStretching(data_pca, low=args.stretch_low, high=args.stretch_high)
     class_count = int(max(np.unique(gt)))
 
     ratio_list = [0.1, 0.01]  # [train_ratio, val_ratio]
@@ -242,12 +365,7 @@ if __name__ == '__main__':
         net = MambaHSI(
             in_channels=channels,
             num_classes=class_count,
-            hidden_dim=128,
-            pyramid_dilation=pyramid_dilation,
-            ablation=args.ablation,
-            outer_residual_mode=args.outer_residual_mode,
-            outer_residual_alpha=args.outer_residual_alpha,
-            spectral_diff_alpha=args.spectral_diff_alpha,
+            **model_kwargs,
         )
 
         logger.info(paras_dict)
@@ -275,7 +393,7 @@ if __name__ == '__main__':
 
         net.to(device)
 
-        optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate, weight_decay=1e-5)
+        optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate, weight_decay=args.weight_decay)
 
         logger.info(optimizer)
         total_params, trainable_params = count_parameters(net)
@@ -436,12 +554,7 @@ if __name__ == '__main__':
         best_net = MambaHSI(
             in_channels=channels,
             num_classes=class_count,
-            hidden_dim=128,
-            pyramid_dilation=pyramid_dilation,
-            ablation=args.ablation,
-            outer_residual_mode=args.outer_residual_mode,
-            outer_residual_alpha=args.outer_residual_alpha,
-            spectral_diff_alpha=args.spectral_diff_alpha,
+            **model_kwargs,
         )
         best_net.to(device)
         best_net.load_state_dict(torch.load(load_weight_path))
