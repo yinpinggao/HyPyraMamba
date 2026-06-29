@@ -1,0 +1,9 @@
+kind,source_media,file,description,bytes
+figure,image15.png,paper_extract/docx_figures_tables/figure_01_overall_architecture.png,Fig. 1 Overall architecture of PyS2CF-Mamba,296403
+figure,image53.png,paper_extract/docx_figures_tables/figure_02_lpps_mamba.png,Fig. 2 LPPS-Mamba branch,246639
+figure,image65.png,paper_extract/docx_figures_tables/figure_03_dgs_mamba.png,Fig. 3 DGS-Mamba branch,260228
+table,image82.png,paper_extract/docx_figures_tables/table_01_performance_ip.png,Table I Performance comparison on the IP dataset,159563
+table,image83.png,paper_extract/docx_figures_tables/table_02_performance_sa.png,Table II Performance comparison on the SA dataset,153539
+table,image84.png,paper_extract/docx_figures_tables/table_03_performance_lk.png,Table III Performance comparison on the LK dataset,114917
+figure,image85.png,paper_extract/docx_figures_tables/figure_04_classification_maps.png,Fig. 4 Classification maps,206974
+table,image86.png,paper_extract/docx_figures_tables/table_04_ablation_all.png,"Table IV Ablation experiments on LK, SA, and IP",98257

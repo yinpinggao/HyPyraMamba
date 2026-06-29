@@ -22,6 +22,7 @@ from torchvision import transforms
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:64,garbage_collection_threshold:0.6'
 scaler = GradScaler(enabled=torch.cuda.is_available())
 FUSION_NAME = 'competitive'
+QUH_DATASETS = {'QUH-Pingan', 'QUH-Qingyun', 'QUH-Tangdaowan'}
 
 
 def vis_a_image(gt_vis, pred_vis, save_single_predict_path, save_single_gt_path, only_vis_label=False):
@@ -115,6 +116,12 @@ def validate_args(args, parser):
         parser.error('--hidden_dim must be divisible by --prca_num_heads.')
     if args.stretch_high <= args.stretch_low:
         parser.error('--stretch_high must be greater than --stretch_low.')
+    if args.tile_size < 0:
+        parser.error('--tile_size must be non-negative.')
+    if args.tile_overlap < 0:
+        parser.error('--tile_overlap must be non-negative.')
+    if args.tile_size > 0 and args.tile_overlap >= args.tile_size:
+        parser.error('--tile_overlap must be smaller than --tile_size.')
 
 
 def get_parser():
@@ -159,6 +166,8 @@ def get_parser():
     parser.add_argument('--outer_residual_mode', type=str, default='standard', choices=sorted(VALID_OUTER_RESIDUAL_MODES))
     parser.add_argument('--outer_residual_alpha', type=float, default=1.0)
     parser.add_argument('--spectral_diff_alpha', type=float, default=0.5)
+    parser.add_argument('--tile_size', type=int, default=0)
+    parser.add_argument('--tile_overlap', type=int, default=32)
 
     args = parser.parse_args()
     validate_args(args, parser)
@@ -193,9 +202,28 @@ save_net_base = base_save_net_name if outer_residual_tag == '' else '{}_{}'.form
 if args.spectral_diff_alpha != 1.0:
     save_net_base = '{}_diff_alpha{}'.format(save_net_base, format_float_for_name(args.spectral_diff_alpha))
 save_net_name = save_net_base if args.ablation == 'full' else '{}_{}'.format(save_net_base, args.ablation)
-data_set_name_list = ['UP', 'HanChuan', 'HongHu', 'Houston','LongKou','Salinas','indian','Botswana','XuZhou','Pavia']
+data_set_name_list = [
+    'UP',
+    'HanChuan',
+    'HongHu',
+    'Houston',
+    'LongKou',
+    'Salinas',
+    'indian',
+    'Botswana',
+    'XuZhou',
+    'Pavia',
+    'QUH-Pingan',
+    'QUH-Qingyun',
+    'QUH-Tangdaowan',
+]
 data_set_name = data_set_name_list[dataset_index]
 split_image = data_set_name in ['HanChuan', 'Houston','Pavia']
+tile_size = args.tile_size
+if data_set_name in QUH_DATASETS and tile_size <= 0:
+    tile_size = 256
+tile_overlap = args.tile_overlap if tile_size > 0 else 0
+use_tile_mode = tile_size > 0
 
 if args.label_smoothing is None:
     label_smoothing = 0.1 if data_set_name == 'indian' else 0.0
@@ -243,6 +271,8 @@ paras_dict = {
     'outer_residual_mode': args.outer_residual_mode,
     'outer_residual_alpha': args.outer_residual_alpha,
     'spectral_diff_alpha': args.spectral_diff_alpha,
+    'tile_size': tile_size,
+    'tile_overlap': tile_overlap,
     'save_vis': args.save_vis,
 }
 
@@ -278,6 +308,95 @@ transform = transforms.Compose([
 def compute_train_loss(net, input_tensor, label_tensor, loss_func):
     pred = net(input_tensor)
     return head_loss(loss_func, pred, label_tensor.long())
+
+
+def _tile_starts(length, tile_size, overlap):
+    if length <= tile_size:
+        return [0]
+    stride = tile_size - overlap
+    starts = list(range(0, length - tile_size + 1, stride))
+    last_start = length - tile_size
+    if starts[-1] != last_start:
+        starts.append(last_start)
+    return starts
+
+
+def generate_tile_slices(height, width, tile_size, overlap):
+    y_starts = _tile_starts(height, tile_size, overlap)
+    x_starts = _tile_starts(width, tile_size, overlap)
+    return [
+        (y0, min(y0 + tile_size, height), x0, min(x0 + tile_size, width))
+        for y0 in y_starts
+        for x0 in x_starts
+    ]
+
+
+def label_tile_has_samples(label_tensor, tile_slice):
+    y0, y1, x0, x1 = tile_slice
+    return bool((label_tensor[y0:y1, x0:x1] >= 0).any().item())
+
+
+def train_one_epoch_tiled(net, x_cpu, train_label_cpu, tile_slices, loss_func, optimizer):
+    tile_order = list(tile_slices)
+    random.shuffle(tile_order)
+    y_train = train_label_cpu.unsqueeze(0)
+    total_loss = 0.0
+    used_tiles = 0
+
+    for tile_slice in tile_order:
+        if not label_tile_has_samples(train_label_cpu, tile_slice):
+            continue
+
+        y0, y1, x0, x1 = tile_slice
+        input_tile = x_cpu[:, :, y0:y1, x0:x1].to(device)
+        label_tile = y_train[:, y0:y1, x0:x1].to(device)
+
+        with autocast(enabled=device.type == 'cuda'):
+            loss = compute_train_loss(net, input_tile, label_tile, loss_func)
+
+        optimizer.zero_grad()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+
+        total_loss += float(loss.detach().cpu())
+        used_tiles += 1
+
+        del input_tile, label_tile, loss
+        torch.cuda.empty_cache()
+
+    if used_tiles == 0:
+        raise RuntimeError('No training tiles contain labeled samples.')
+
+    return total_loss / used_tiles, used_tiles
+
+
+def predict_tiled(net, x_cpu, tile_slices, class_count, output_size):
+    height, width = output_size
+    logit_sum = np.zeros((class_count, height, width), dtype=np.float32)
+    logit_count = np.zeros((height, width), dtype=np.float32)
+
+    for tile_slice in tile_slices:
+        y0, y1, x0, x1 = tile_slice
+        input_tile = x_cpu[:, :, y0:y1, x0:x1].to(device)
+
+        with autocast(enabled=device.type == 'cuda'):
+            output_tile = net(input_tile)
+            seg_logits_tile = resize(
+                input=output_tile,
+                size=(y1 - y0, x1 - x0),
+                mode='bilinear',
+                align_corners=True
+            )
+
+        logit_sum[:, y0:y1, x0:x1] += seg_logits_tile.squeeze(0).float().cpu().numpy()
+        logit_count[y0:y1, x0:x1] += 1.0
+
+        del input_tile, output_tile, seg_logits_tile
+        torch.cuda.empty_cache()
+
+    logit_sum /= np.maximum(logit_count[None, :, :], 1.0)
+    return np.expand_dims(np.argmax(logit_sum, axis=0), axis=0)
 
 
 def count_parameters(model):
@@ -372,8 +491,20 @@ if __name__ == '__main__':
         logger.info(net)
         logger.info(get_fusion_status(net))
 
-        x = transform(np.array(img))
-        x = x.unsqueeze(0).float().to(device)
+        x = transform(np.asarray(img, dtype=np.float32))
+        x = x.unsqueeze(0).float()
+        if use_tile_mode:
+            tile_slices = generate_tile_slices(height, width, tile_size, tile_overlap)
+            logger.info(
+                'Tile mode enabled: tile_size={} tile_overlap={} tile_count={}'.format(
+                    tile_size,
+                    tile_overlap,
+                    len(tile_slices)
+                )
+            )
+        else:
+            tile_slices = None
+            x = x.to(device)
 
         if class_weight_mode == 'balanced':
             class_weights, class_counts = compute_balanced_class_weights(train_label, class_count, device)
@@ -387,9 +518,10 @@ if __name__ == '__main__':
         else:
             loss_func = torch.nn.CrossEntropyLoss(ignore_index=-1, label_smoothing=label_smoothing)
 
-        train_label = train_label.to(device)
-        test_label = test_label.to(device)
-        val_label = val_label.to(device)
+        if not use_tile_mode:
+            train_label = train_label.to(device)
+            test_label = test_label.to(device)
+            val_label = val_label.to(device)
 
         net.to(device)
 
@@ -408,7 +540,11 @@ if __name__ == '__main__':
             if calculate_flops is None:
                 logger.warning('calflops is not installed; FLOPs(G) is unavailable.')
             else:
-                flops, macs1, para = calculate_flops(model=net, input_shape=(1, x.shape[1], x.shape[2], x.shape[3]))
+                if use_tile_mode:
+                    flops_shape = (1, x.shape[1], min(tile_size, x.shape[2]), min(tile_size, x.shape[3]))
+                else:
+                    flops_shape = (1, x.shape[1], x.shape[2], x.shape[3])
+                flops, macs1, para = calculate_flops(model=net, input_shape=flops_shape)
                 logger.info('calflops para: {}'.format(para))
                 logger.info('calflops flops: {}'.format(flops))
                 logger.info('FLOPs are tool estimates; verify Mamba custom ops support before reporting them.')
@@ -420,7 +556,24 @@ if __name__ == '__main__':
 
             net.train()
 
-            if split_image:
+            if use_tile_mode:
+                avg_loss, used_tiles = train_one_epoch_tiled(
+                    net,
+                    x,
+                    train_label,
+                    tile_slices,
+                    loss_func,
+                    optimizer
+                )
+                logger.info(
+                    'Iter:{}|cls_loss:{}|tiles:{}'.format(
+                        epoch,
+                        avg_loss,
+                        used_tiles
+                    )
+                )
+
+            elif split_image:
                 x_part1 = x[:, :, :x.shape[2] // 2 + 5, :]
                 y_part1 = y_train[:, :x.shape[2] // 2 + 5, :]
                 x_part2 = x[:, :, x.shape[2] // 2 - 5:, :]
@@ -519,10 +672,13 @@ if __name__ == '__main__':
             net.eval()
             with torch.no_grad():
                 evaluator.reset()
-                output_val = net(x)
                 y_val = val_label.unsqueeze(0)
-                seg_logits = resize(input=output_val, size=y_val.shape[1:], mode='bilinear', align_corners=True)
-                predict = torch.argmax(seg_logits, dim=1).cpu().numpy()
+                if use_tile_mode:
+                    predict = predict_tiled(net, x, tile_slices, class_count, y_val.shape[1:])
+                else:
+                    output_val = net(x)
+                    seg_logits = resize(input=output_val, size=y_val.shape[1:], mode='bilinear', align_corners=True)
+                    predict = torch.argmax(seg_logits, dim=1).cpu().numpy()
                 Y_val_np = val_label.cpu().numpy()
                 Y_val_255 = np.where(Y_val_np == -1, 255, Y_val_np)
                 evaluator.add_batch(np.expand_dims(Y_val_255, axis=0), predict)
@@ -531,7 +687,7 @@ if __name__ == '__main__':
                 mAcc, Acc = evaluator.Pixel_Accuracy_Class()
                 Kappa = evaluator.Kappa()
                 logger.info(get_fusion_status(net))
-                logger.info('Evaluate {}|OA:{}|MACC:{}|Kappa:{}|MIOU:{}|IOU:{}|ACC:{}'.format(epoch, OA, mAcc, Kappa, mIOU, IOU, Acc))
+                logger.info('Evaluate {}|OA:{}|AA:{}|Kappa:{}'.format(epoch, OA, mAcc, Kappa))
 
                 if OA >= best_val_acc:
                     best_val_acc = OA
@@ -565,11 +721,13 @@ if __name__ == '__main__':
 
         with torch.no_grad():
             test_evaluator.reset()
-            output_test = best_net(x)
-
             y_test = test_label.unsqueeze(0)
-            seg_logits_test = resize(input=output_test, size=y_test.shape[1:], mode='bilinear', align_corners=True)
-            predict_test = torch.argmax(seg_logits_test, dim=1).cpu().numpy()
+            if use_tile_mode:
+                predict_test = predict_tiled(best_net, x, tile_slices, class_count, y_test.shape[1:])
+            else:
+                output_test = best_net(x)
+                seg_logits_test = resize(input=output_test, size=y_test.shape[1:], mode='bilinear', align_corners=True)
+                predict_test = torch.argmax(seg_logits_test, dim=1).cpu().numpy()
             Y_test_np = test_label.cpu().numpy()
             Y_test_255 = np.where(Y_test_np == -1, 255, Y_test_np)
             test_evaluator.add_batch(np.expand_dims(Y_test_255, axis=0), predict_test)
@@ -577,7 +735,7 @@ if __name__ == '__main__':
             mIOU_test, IOU_test = test_evaluator.Mean_Intersection_over_Union()
             mAcc_test, Acc_test = test_evaluator.Pixel_Accuracy_Class()
             Kappa_test = test_evaluator.Kappa()
-            logger.info('Test {}|OA:{}|MACC:{}|Kappa:{}|MIOU:{}|IOU:{}|ACC:{}'.format(epoch, OA_test, mAcc_test, Kappa_test, mIOU_test, IOU_test, Acc_test))
+            logger.info('Test {}|OA:{}|AA:{}|Kappa:{}'.format(epoch, OA_test, mAcc_test, Kappa_test))
         toc2 = time.perf_counter()  # 记录结束时间
         test_time = toc2 - tic2
         if args.save_vis:

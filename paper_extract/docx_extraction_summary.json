@@ -1,0 +1,61 @@
+{
+  "source_docx": "论文初稿_gyp_v6_精简后.docx",
+  "media_count": 86,
+  "media_by_suffix": {
+    ".wmf": 78,
+    ".png": 8
+  },
+  "table_count": 0,
+  "tables": [],
+  "image_reference_count": 8,
+  "image_refs": [
+    {
+      "block_index": 20,
+      "paragraph_text": "",
+      "rid": "rId38",
+      "target": "media/image15.png"
+    },
+    {
+      "block_index": 38,
+      "paragraph_text": "",
+      "rid": "rId113",
+      "target": "media/image53.png"
+    },
+    {
+      "block_index": 48,
+      "paragraph_text": "",
+      "rid": "rId136",
+      "target": "media/image65.png"
+    },
+    {
+      "block_index": 70,
+      "paragraph_text": "",
+      "rid": "rId169",
+      "target": "media/image82.png"
+    },
+    {
+      "block_index": 71,
+      "paragraph_text": "",
+      "rid": "rId170",
+      "target": "media/image83.png"
+    },
+    {
+      "block_index": 72,
+      "paragraph_text": "",
+      "rid": "rId171",
+      "target": "media/image84.png"
+    },
+    {
+      "block_index": 73,
+      "paragraph_text": "",
+      "rid": "rId172",
+      "target": "media/image85.png"
+    },
+    {
+      "block_index": 75,
+      "paragraph_text": "",
+      "rid": "rId173",
+      "target": "media/image86.png"
+    }
+  ]
+}

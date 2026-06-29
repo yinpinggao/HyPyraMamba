@@ -4,6 +4,14 @@ import scipy.io as sio
 import torch
 
 
+def _load_first_existing(data_path, candidates, variable_name):
+    for candidate in candidates:
+        path = os.path.join(data_path, candidate)
+        if os.path.exists(path):
+            return sio.loadmat(path)[variable_name]
+    raise FileNotFoundError('None of these dataset files exist: {}'.format(candidates))
+
+
 def load_data(data_set_name, data_path='./data'):
     if data_set_name == 'UP':
         data = sio.loadmat(os.path.join(data_path, 'UP', 'PaviaU.mat'))['paviaU']
@@ -42,6 +50,52 @@ def load_data(data_set_name, data_path='./data'):
     elif data_set_name == 'Pavia':
         data = sio.loadmat(os.path.join(data_path, 'Pavia', 'Pavia.mat'))['pavia']
         labels = sio.loadmat(os.path.join(data_path, 'Pavia', 'Pavia_gt.mat'))['pavia_gt']
+
+    elif data_set_name == 'QUH-Pingan':
+        data = _load_first_existing(
+            data_path,
+            ['QUH-Pingan.mat', os.path.join('QUH-Pingan', 'QUH-Pingan.mat')],
+            'Haigang'
+        )
+        labels = _load_first_existing(
+            data_path,
+            [
+                'QUH-Pingan_GT.mat',
+                'QUH-Pingan_GT(1).mat',
+                os.path.join('QUH-Pingan', 'QUH-Pingan_GT.mat'),
+                os.path.join('QUH-Pingan', 'QUH-Pingan_GT(1).mat'),
+            ],
+            'HaigangGT'
+        )
+
+    elif data_set_name == 'QUH-Qingyun':
+        data = _load_first_existing(
+            data_path,
+            ['QUH-Qingyun.mat', os.path.join('QUH-Qingyun', 'QUH-Qingyun.mat')],
+            'Chengqu'
+        )
+        labels = _load_first_existing(
+            data_path,
+            [
+                'QUH-Qingyun_GT.mat',
+                'QUH-Qingyun_GT(1).mat',
+                os.path.join('QUH-Qingyun', 'QUH-Qingyun_GT.mat'),
+                os.path.join('QUH-Qingyun', 'QUH-Qingyun_GT(1).mat'),
+            ],
+            'ChengquGT'
+        )
+
+    elif data_set_name == 'QUH-Tangdaowan':
+        data = _load_first_existing(
+            data_path,
+            ['QUH-Tangdaowan.mat', os.path.join('QUH-Tangdaowan', 'QUH-Tangdaowan.mat')],
+            'Tangdaowan'
+        )
+        labels = _load_first_existing(
+            data_path,
+            ['QUH-Tangdaowan_GT.mat', os.path.join('QUH-Tangdaowan', 'QUH-Tangdaowan_GT.mat')],
+            'TangdaowanGT'
+        )
         
     return data, labels
 
