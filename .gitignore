@@ -19,3 +19,9 @@ result_*.txt
 # 忽略数据集目录
 data/
 datasets/
+
+# 忽略本地导出的 split/data 缓存
+HypraMamba/splits/
+
+# 忽略本地训练输出
+HypraMamba/RUNS*/

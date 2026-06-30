@@ -21,6 +21,7 @@ SPATIAL_PRCA_DISABLED_ABLATIONS = {'wo_prca'}
 SPECTRAL_DIFF_DISABLED_ABLATIONS = {'wo_diff'}
 COMPETITIVE_FUSION_DISABLED_ABLATIONS = {'wo_competitive'}
 VALID_OUTER_RESIDUAL_MODES = {'standard', 'no_outer', 'scaled'}
+VALID_HIGH_RES_SKIP_MODES = {'none', 'patch', 'pre_pool'}
 
 
 def _validate_ablation(ablation):
@@ -32,6 +33,12 @@ def _validate_ablation(ablation):
 def _validate_outer_residual_mode(mode):
     if mode not in VALID_OUTER_RESIDUAL_MODES:
         raise ValueError('Unsupported outer_residual_mode: {}'.format(mode))
+    return mode
+
+
+def _validate_high_res_skip_mode(mode):
+    if mode not in VALID_HIGH_RES_SKIP_MODES:
+        raise ValueError('Unsupported high_res_skip: {}'.format(mode))
     return mode
 
 
@@ -504,9 +511,10 @@ class ImprovedMambaHSI(nn.Module):
                  prca_num_scales=3, prca_num_layers=2, prca_num_heads=4,
                  lsp_reduction=4, spa_mamba_d_state=16, spa_mamba_d_conv=4,
                  spa_mamba_expand=2, spe_mamba_d_state=16, spe_mamba_d_conv=4,
-                 spe_mamba_expand=2):
+                 spe_mamba_expand=2, high_res_skip='none'):
         super(ImprovedMambaHSI, self).__init__()
         self.ablation = _validate_ablation(ablation)
+        self.high_res_skip = _validate_high_res_skip_mode(high_res_skip)
         _validate_model_config(
             hidden_dim=hidden_dim,
             token_num=token_num,
@@ -531,30 +539,41 @@ class ImprovedMambaHSI(nn.Module):
             nn.SiLU()
         )
 
-        self.mamba = nn.Sequential(
-            ImprovedBothMamba(
-                hidden_dim,
-                token_num=token_num,
-                use_residual=use_residual,
-                group_num=group_num,
-                pyramid_dilation=pyramid_dilation,
-                ablation=ablation,
-                outer_residual_mode=outer_residual_mode,
-                outer_residual_alpha=outer_residual_alpha,
-                spectral_diff_alpha=spectral_diff_alpha,
-                prca_num_scales=prca_num_scales,
-                prca_num_layers=prca_num_layers,
-                prca_num_heads=prca_num_heads,
-                lsp_reduction=lsp_reduction,
-                spa_mamba_d_state=spa_mamba_d_state,
-                spa_mamba_d_conv=spa_mamba_d_conv,
-                spa_mamba_expand=spa_mamba_expand,
-                spe_mamba_d_state=spe_mamba_d_state,
-                spe_mamba_d_conv=spe_mamba_d_conv,
-                spe_mamba_expand=spe_mamba_expand,
-            ),
-            nn.AvgPool2d(kernel_size=pool_size, stride=pool_size, padding=0),
+        self.mamba_block = ImprovedBothMamba(
+            hidden_dim,
+            token_num=token_num,
+            use_residual=use_residual,
+            group_num=group_num,
+            pyramid_dilation=pyramid_dilation,
+            ablation=ablation,
+            outer_residual_mode=outer_residual_mode,
+            outer_residual_alpha=outer_residual_alpha,
+            spectral_diff_alpha=spectral_diff_alpha,
+            prca_num_scales=prca_num_scales,
+            prca_num_layers=prca_num_layers,
+            prca_num_heads=prca_num_heads,
+            lsp_reduction=lsp_reduction,
+            spa_mamba_d_state=spa_mamba_d_state,
+            spa_mamba_d_conv=spa_mamba_d_conv,
+            spa_mamba_expand=spa_mamba_expand,
+            spe_mamba_d_state=spe_mamba_d_state,
+            spe_mamba_d_conv=spe_mamba_d_conv,
+            spe_mamba_expand=spe_mamba_expand,
         )
+        self.pool = nn.Identity() if pool_size == 1 else nn.AvgPool2d(
+            kernel_size=pool_size,
+            stride=pool_size,
+            padding=0
+        )
+
+        if self.high_res_skip == 'none':
+            self.skip_proj = None
+        else:
+            self.skip_proj = nn.Sequential(
+                nn.Conv2d(in_channels=hidden_dim, out_channels=hidden_dim, kernel_size=1, stride=1, padding=0),
+                nn.GroupNorm(group_num, hidden_dim),
+                nn.SiLU()
+            )
 
         self.cls_head = nn.Sequential(
             nn.Conv2d(in_channels=hidden_dim, out_channels=cls_head_dim, kernel_size=1, stride=1, padding=0),
@@ -564,6 +583,23 @@ class ImprovedMambaHSI(nn.Module):
         )
 
     def forward(self, x):
-        x = self.patch_embedding(x)
-        x_feat = self.mamba(x)
+        x_embed = self.patch_embedding(x)
+        x_pre_pool = self.mamba_block(x_embed)
+        x_feat = self.pool(x_pre_pool)
+
+        if self.skip_proj is not None:
+            if self.high_res_skip == 'patch':
+                skip_feat = x_embed
+            else:
+                skip_feat = x_pre_pool
+
+            if skip_feat.shape[-2:] != x_feat.shape[-2:]:
+                skip_feat = torch.nn.functional.interpolate(
+                    skip_feat,
+                    size=x_feat.shape[-2:],
+                    mode='bilinear',
+                    align_corners=False
+                )
+            x_feat = x_feat + self.skip_proj(skip_feat)
+
         return self.cls_head(x_feat)

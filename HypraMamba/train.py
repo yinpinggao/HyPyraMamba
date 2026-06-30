@@ -9,7 +9,12 @@ from utils.Loss import head_loss, resize
 from utils.evaluation import Evaluator
 from utils.HSICommonUtils import ImageStretching
 from utils.setup_logger import setup_logger
-from model.MambaHSI import ImprovedMambaHSI as MambaHSI, VALID_ABLATIONS, VALID_OUTER_RESIDUAL_MODES
+from model.MambaHSI import (
+    ImprovedMambaHSI as MambaHSI,
+    VALID_ABLATIONS,
+    VALID_HIGH_RES_SKIP_MODES,
+    VALID_OUTER_RESIDUAL_MODES,
+)
 try:
     from calflops import calculate_flops
 except ImportError:
@@ -102,6 +107,8 @@ def validate_args(args, parser):
 
     if args.weight_decay < 0:
         parser.error('--weight_decay must be non-negative.')
+    if args.cosine_eta_min < 0:
+        parser.error('--cosine_eta_min must be non-negative.')
     if args.gaussian_sigma < 0:
         parser.error('--gaussian_sigma must be non-negative.')
     if args.stretch_low < 0 or args.stretch_high > 100:
@@ -122,6 +129,8 @@ def validate_args(args, parser):
         parser.error('--tile_overlap must be non-negative.')
     if args.tile_size > 0 and args.tile_overlap >= args.tile_size:
         parser.error('--tile_overlap must be smaller than --tile_size.')
+    if args.tile_update_groups <= 0:
+        parser.error('--tile_update_groups must be a positive integer.')
 
 
 def get_parser():
@@ -133,6 +142,9 @@ def get_parser():
     parser.add_argument('--lr', type=float, default=0.0003)
     parser.add_argument('--weight_decay', type=float, default=1e-5)
     parser.add_argument('--max_epoch', type=int, default=200)
+    parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamw'])
+    parser.add_argument('--scheduler', type=str, default='none', choices=['none', 'cosine'])
+    parser.add_argument('--cosine_eta_min', type=float, default=0.0)
     parser.add_argument('--train_samples', type=int, default=30)
     parser.add_argument('--val_samples', type=int, default=10)
     parser.add_argument('--seed_list', type=parse_int_list, default=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
@@ -150,6 +162,7 @@ def get_parser():
     parser.add_argument('--group_num', type=int, default=4)
     parser.add_argument('--use_residual', type=str2bool, default=True)
     parser.add_argument('--pool_size', type=int, default=2)
+    parser.add_argument('--high_res_skip', type=str, default='none', choices=sorted(VALID_HIGH_RES_SKIP_MODES))
     parser.add_argument('--cls_head_dim', type=int, default=128)
     parser.add_argument('--prca_num_scales', type=int, default=3)
     parser.add_argument('--prca_num_layers', type=int, default=2)
@@ -168,6 +181,7 @@ def get_parser():
     parser.add_argument('--spectral_diff_alpha', type=float, default=0.5)
     parser.add_argument('--tile_size', type=int, default=0)
     parser.add_argument('--tile_overlap', type=int, default=32)
+    parser.add_argument('--tile_update_groups', type=int, default=1)
 
     args = parser.parse_args()
     validate_args(args, parser)
@@ -242,6 +256,9 @@ paras_dict = {
     'num_list': num_list,
     'lr': learning_rate,
     'weight_decay': args.weight_decay,
+    'optimizer': args.optimizer,
+    'scheduler': args.scheduler,
+    'cosine_eta_min': args.cosine_eta_min,
     'seed_list': seed_list,
     'label_smoothing': label_smoothing,
     'fusion_mode': FUSION_NAME,
@@ -256,6 +273,7 @@ paras_dict = {
     'group_num': args.group_num,
     'use_residual': args.use_residual,
     'pool_size': args.pool_size,
+    'high_res_skip': args.high_res_skip,
     'cls_head_dim': args.cls_head_dim,
     'prca_num_scales': args.prca_num_scales,
     'prca_num_layers': args.prca_num_layers,
@@ -273,6 +291,7 @@ paras_dict = {
     'spectral_diff_alpha': args.spectral_diff_alpha,
     'tile_size': tile_size,
     'tile_overlap': tile_overlap,
+    'tile_update_groups': args.tile_update_groups,
     'save_vis': args.save_vis,
 }
 
@@ -287,6 +306,7 @@ model_kwargs = {
     'outer_residual_alpha': args.outer_residual_alpha,
     'spectral_diff_alpha': args.spectral_diff_alpha,
     'pool_size': args.pool_size,
+    'high_res_skip': args.high_res_skip,
     'cls_head_dim': args.cls_head_dim,
     'prca_num_scales': args.prca_num_scales,
     'prca_num_layers': args.prca_num_layers,
@@ -303,6 +323,26 @@ model_kwargs = {
 transform = transforms.Compose([
     transforms.ToTensor(),
 ])
+
+
+def build_optimizer(net, optimizer_name, lr, weight_decay):
+    if optimizer_name == 'adamw':
+        return torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=weight_decay)
+    if optimizer_name == 'adam':
+        return torch.optim.Adam(net.parameters(), lr=lr, weight_decay=weight_decay)
+    raise ValueError('Unsupported optimizer: {}'.format(optimizer_name))
+
+
+def build_scheduler(optimizer, scheduler_name, max_epochs, eta_min):
+    if scheduler_name == 'cosine':
+        return torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=max_epochs,
+            eta_min=eta_min
+        )
+    if scheduler_name == 'none':
+        return None
+    raise ValueError('Unsupported scheduler: {}'.format(scheduler_name))
 
 
 def compute_train_loss(net, input_tensor, label_tensor, loss_func):
@@ -331,44 +371,74 @@ def generate_tile_slices(height, width, tile_size, overlap):
     ]
 
 
-def label_tile_has_samples(label_tensor, tile_slice):
+def count_labeled_pixels_in_tile(label_tensor, tile_slice):
     y0, y1, x0, x1 = tile_slice
-    return bool((label_tensor[y0:y1, x0:x1] >= 0).any().item())
+    return int((label_tensor[y0:y1, x0:x1] >= 0).sum().item())
 
 
-def train_one_epoch_tiled(net, x_cpu, train_label_cpu, tile_slices, loss_func, optimizer):
-    tile_order = list(tile_slices)
-    random.shuffle(tile_order)
-    y_train = train_label_cpu.unsqueeze(0)
-    total_loss = 0.0
-    used_tiles = 0
+def _build_balanced_tile_groups(train_tiles, group_count):
+    group_count = max(1, min(int(group_count), len(train_tiles)))
+    groups = [[] for _ in range(group_count)]
+    group_pixels = [0 for _ in range(group_count)]
 
-    for tile_slice in tile_order:
-        if not label_tile_has_samples(train_label_cpu, tile_slice):
-            continue
+    # Randomize equal-size/equal-density cases, then greedily balance labeled-pixel counts.
+    shuffled_tiles = list(train_tiles)
+    random.shuffle(shuffled_tiles)
+    shuffled_tiles.sort(key=lambda item: item[1], reverse=True)
+    for tile_slice, valid_pixels in shuffled_tiles:
+        group_idx = min(range(group_count), key=lambda idx: group_pixels[idx])
+        groups[group_idx].append((tile_slice, valid_pixels))
+        group_pixels[group_idx] += valid_pixels
 
-        y0, y1, x0, x1 = tile_slice
-        input_tile = x_cpu[:, :, y0:y1, x0:x1].to(device)
-        label_tile = y_train[:, y0:y1, x0:x1].to(device)
+    return [group for group in groups if len(group) > 0]
 
-        with autocast(enabled=device.type == 'cuda'):
-            loss = compute_train_loss(net, input_tile, label_tile, loss_func)
 
-        optimizer.zero_grad()
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
+def train_one_epoch_tiled(net, x_cpu, train_label_cpu, tile_slices, loss_func, optimizer, tile_update_groups):
+    train_tiles = []
+    for tile_slice in tile_slices:
+        valid_pixels = count_labeled_pixels_in_tile(train_label_cpu, tile_slice)
+        if valid_pixels > 0:
+            train_tiles.append((tile_slice, valid_pixels))
 
-        total_loss += float(loss.detach().cpu())
-        used_tiles += 1
-
-        del input_tile, label_tile, loss
-        torch.cuda.empty_cache()
-
-    if used_tiles == 0:
+    if len(train_tiles) == 0:
         raise RuntimeError('No training tiles contain labeled samples.')
 
-    return total_loss / used_tiles, used_tiles
+    tile_groups = _build_balanced_tile_groups(train_tiles, tile_update_groups)
+    y_train = train_label_cpu.unsqueeze(0)
+    total_loss = 0.0
+    total_valid_pixels = sum(valid_pixels for _, valid_pixels in train_tiles)
+    used_tiles = 0
+    used_groups = 0
+
+    for tile_group in tile_groups:
+        group_valid_pixels = sum(valid_pixels for _, valid_pixels in tile_group)
+        if group_valid_pixels <= 0:
+            continue
+
+        optimizer.zero_grad(set_to_none=True)
+        for tile_slice, valid_pixels in tile_group:
+            y0, y1, x0, x1 = tile_slice
+            input_tile = x_cpu[:, :, y0:y1, x0:x1].to(device)
+            label_tile = y_train[:, y0:y1, x0:x1].to(device)
+
+            with autocast(enabled=device.type == 'cuda'):
+                loss = compute_train_loss(net, input_tile, label_tile, loss_func)
+                group_loss_weight = valid_pixels / group_valid_pixels
+                weighted_loss = loss * group_loss_weight
+
+            scaler.scale(weighted_loss).backward()
+
+            total_loss += float(loss.detach().cpu()) * (valid_pixels / total_valid_pixels)
+            used_tiles += 1
+
+            del input_tile, label_tile, loss, weighted_loss
+            torch.cuda.empty_cache()
+
+        scaler.step(optimizer)
+        scaler.update()
+        used_groups += 1
+
+    return total_loss, used_tiles, used_groups
 
 
 def predict_tiled(net, x_cpu, tile_slices, class_count, output_size):
@@ -525,9 +595,11 @@ if __name__ == '__main__':
 
         net.to(device)
 
-        optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate, weight_decay=args.weight_decay)
+        optimizer = build_optimizer(net, args.optimizer, learning_rate, args.weight_decay)
+        scheduler = build_scheduler(optimizer, args.scheduler, max_epoch, args.cosine_eta_min)
 
         logger.info(optimizer)
+        logger.info('scheduler: {}'.format(scheduler))
         total_params, trainable_params = count_parameters(net)
         total_params_m = total_params / 1e6
         trainable_params_m = trainable_params / 1e6
@@ -557,19 +629,21 @@ if __name__ == '__main__':
             net.train()
 
             if use_tile_mode:
-                avg_loss, used_tiles = train_one_epoch_tiled(
+                avg_loss, used_tiles, used_groups = train_one_epoch_tiled(
                     net,
                     x,
                     train_label,
                     tile_slices,
                     loss_func,
-                    optimizer
+                    optimizer,
+                    args.tile_update_groups
                 )
                 logger.info(
-                    'Iter:{}|cls_loss:{}|tiles:{}'.format(
+                    'Iter:{}|cls_loss:{}|tiles:{}|tile_update_groups:{}'.format(
                         epoch,
                         avg_loss,
-                        used_tiles
+                        used_tiles,
+                        used_groups
                     )
                 )
 
@@ -697,6 +771,9 @@ if __name__ == '__main__':
                     save_single_predict_path = os.path.join(save_vis_folder, 'predict_{}.png'.format(str(epoch + 1)))
                     save_single_gt_path = os.path.join(save_vis_folder, 'gt.png')
                     vis_a_image(gt, predict, save_single_predict_path, save_single_gt_path)
+
+            if scheduler is not None:
+                scheduler.step()
 
             torch.cuda.empty_cache()
         toc1 = time.perf_counter()  # 记录结束时间
