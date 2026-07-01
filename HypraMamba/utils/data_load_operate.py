@@ -142,6 +142,38 @@ def sampling(ratio_list, num_list, gt_reshape, class_count, Flag):
     return train_label_index_list, val_label_index_list, test_label_index_list, all_label_index_list
 
 
+def load_fixed_split(split_dir, data_set_name, seed, train_samples, val_samples, gt_reshape=None):
+    split_path = os.path.join(
+        split_dir,
+        data_set_name,
+        'seed{}_tr{}_val{}.npz'.format(seed, train_samples, val_samples)
+    )
+    if not os.path.exists(split_path):
+        raise FileNotFoundError('Fixed split file does not exist: {}'.format(split_path))
+
+    payload = np.load(split_path, allow_pickle=False)
+    required_keys = ['train_idx', 'val_idx', 'test_idx']
+    missing_keys = [key for key in required_keys if key not in payload]
+    if missing_keys:
+        raise KeyError('Fixed split file {} is missing keys: {}'.format(split_path, missing_keys))
+
+    train_idx = np.asarray(payload['train_idx'], dtype=np.int64)
+    val_idx = np.asarray(payload['val_idx'], dtype=np.int64)
+    test_idx = np.asarray(payload['test_idx'], dtype=np.int64)
+
+    if gt_reshape is not None:
+        pixel_count = int(gt_reshape.shape[0])
+        for name, indices in [('train_idx', train_idx), ('val_idx', val_idx), ('test_idx', test_idx)]:
+            if indices.size == 0:
+                raise ValueError('{} is empty in fixed split file: {}'.format(name, split_path))
+            if int(indices.min()) < 0 or int(indices.max()) >= pixel_count:
+                raise ValueError('{} contains out-of-range indices in fixed split file: {}'.format(name, split_path))
+            if np.any(gt_reshape[indices] <= 0):
+                raise ValueError('{} contains unlabeled pixels in fixed split file: {}'.format(name, split_path))
+
+    return train_idx, val_idx, test_idx, split_path
+
+
 def generate_image_iter(hsi_h, hsi_w, label_reshape, index):
     def generate_label_map(num, hsi_w):
         num =np.array(num)

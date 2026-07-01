@@ -131,6 +131,8 @@ def validate_args(args, parser):
         parser.error('--tile_overlap must be smaller than --tile_size.')
     if args.tile_update_groups <= 0:
         parser.error('--tile_update_groups must be a positive integer.')
+    if args.val_interval <= 0:
+        parser.error('--val_interval must be a positive integer.')
 
 
 def get_parser():
@@ -147,6 +149,7 @@ def get_parser():
     parser.add_argument('--cosine_eta_min', type=float, default=0.0)
     parser.add_argument('--train_samples', type=int, default=30)
     parser.add_argument('--val_samples', type=int, default=10)
+    parser.add_argument('--split_dir', type=str, default='./splits/quh_100_30_seed0-9')
     parser.add_argument('--seed_list', type=parse_int_list, default=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
     parser.add_argument('--exp_name', type=str, default='RUNS')
     parser.add_argument('--record_computecost', type=str2bool, default=False)
@@ -182,6 +185,8 @@ def get_parser():
     parser.add_argument('--tile_size', type=int, default=0)
     parser.add_argument('--tile_overlap', type=int, default=32)
     parser.add_argument('--tile_update_groups', type=int, default=1)
+    parser.add_argument('--val_interval', type=int, default=1)
+    parser.add_argument('--sparse_val', type=str2bool, default=True)
 
     args = parser.parse_args()
     validate_args(args, parser)
@@ -259,6 +264,7 @@ paras_dict = {
     'optimizer': args.optimizer,
     'scheduler': args.scheduler,
     'cosine_eta_min': args.cosine_eta_min,
+    'split_dir': args.split_dir,
     'seed_list': seed_list,
     'label_smoothing': label_smoothing,
     'fusion_mode': FUSION_NAME,
@@ -292,6 +298,8 @@ paras_dict = {
     'tile_size': tile_size,
     'tile_overlap': tile_overlap,
     'tile_update_groups': args.tile_update_groups,
+    'val_interval': args.val_interval,
+    'sparse_val': args.sparse_val,
     'save_vis': args.save_vis,
 }
 
@@ -371,6 +379,21 @@ def generate_tile_slices(height, width, tile_size, overlap):
     ]
 
 
+def build_labeled_points(label_tensor):
+    if torch.is_tensor(label_tensor):
+        label_np = label_tensor.detach().cpu().numpy()
+    else:
+        label_np = np.asarray(label_tensor)
+    rows, cols = np.nonzero(label_np >= 0)
+    if len(rows) == 0:
+        raise RuntimeError('No labeled pixels available for sparse evaluation.')
+    return {
+        'rows': rows.astype(np.int64),
+        'cols': cols.astype(np.int64),
+        'labels': label_np[rows, cols].astype(np.int64),
+    }
+
+
 def count_labeled_pixels_in_tile(label_tensor, tile_slice):
     y0, y1, x0, x1 = tile_slice
     return int((label_tensor[y0:y1, x0:x1] >= 0).sum().item())
@@ -432,7 +455,6 @@ def train_one_epoch_tiled(net, x_cpu, train_label_cpu, tile_slices, loss_func, o
             used_tiles += 1
 
             del input_tile, label_tile, loss, weighted_loss
-            torch.cuda.empty_cache()
 
         scaler.step(optimizer)
         scaler.update()
@@ -463,10 +485,56 @@ def predict_tiled(net, x_cpu, tile_slices, class_count, output_size):
         logit_count[y0:y1, x0:x1] += 1.0
 
         del input_tile, output_tile, seg_logits_tile
-        torch.cuda.empty_cache()
 
     logit_sum /= np.maximum(logit_count[None, :, :], 1.0)
     return np.expand_dims(np.argmax(logit_sum, axis=0), axis=0)
+
+
+def predict_tiled_sparse(net, x_cpu, tile_slices, class_count, labeled_points):
+    rows = labeled_points['rows']
+    cols = labeled_points['cols']
+    logit_sum = np.zeros((len(rows), class_count), dtype=np.float32)
+    logit_count = np.zeros(len(rows), dtype=np.float32)
+
+    for tile_slice in tile_slices:
+        y0, y1, x0, x1 = tile_slice
+        point_mask = (rows >= y0) & (rows < y1) & (cols >= x0) & (cols < x1)
+        if not np.any(point_mask):
+            continue
+
+        input_tile = x_cpu[:, :, y0:y1, x0:x1].to(device)
+        local_rows = torch.as_tensor(rows[point_mask] - y0, dtype=torch.long, device=device)
+        local_cols = torch.as_tensor(cols[point_mask] - x0, dtype=torch.long, device=device)
+
+        with autocast(enabled=device.type == 'cuda'):
+            output_tile = net(input_tile)
+            seg_logits_tile = resize(
+                input=output_tile,
+                size=(y1 - y0, x1 - x0),
+                mode='bilinear',
+                align_corners=True
+            )
+
+        point_logits = seg_logits_tile[0, :, local_rows, local_cols].transpose(0, 1)
+        logit_sum[point_mask] += point_logits.float().cpu().numpy()
+        logit_count[point_mask] += 1.0
+
+        del input_tile, local_rows, local_cols, output_tile, seg_logits_tile, point_logits
+
+    if np.any(logit_count == 0):
+        raise RuntimeError('Sparse tiled prediction missed labeled pixels.')
+    logit_sum /= logit_count[:, None]
+    return np.argmax(logit_sum, axis=1).astype(np.int64)
+
+
+def evaluate_sparse_prediction(evaluator, labeled_points, prediction):
+    evaluator.reset()
+    evaluator.add_batch(labeled_points['labels'][None, :], prediction[None, :])
+    oa = evaluator.Pixel_Accuracy()
+    miou, iou = evaluator.Mean_Intersection_over_Union()
+    macc, acc = evaluator.Pixel_Accuracy_Class()
+    kappa = evaluator.Kappa()
+    return oa, miou, iou, macc, acc, kappa
 
 
 def count_parameters(model):
@@ -541,13 +609,31 @@ if __name__ == '__main__':
         predict_save_path = os.path.join(save_single_experiment_folder, 'pred_vis_tr{}_val{}.png'.format(num_list[0], num_list[1]))
         gt_save_path = os.path.join(save_single_experiment_folder, 'gt_vis_tr{}_val{}.png'.format(num_list[0], num_list[1]))
 
-        train_data_index, val_data_index, test_data_index, _ = data_load_operate.sampling(
-            ratio_list,
-            num_list,
-            gt_reshape,
-            class_count,
-            1,
-        )
+        if data_set_name in QUH_DATASETS:
+            train_data_index, val_data_index, test_data_index, split_path = data_load_operate.load_fixed_split(
+                args.split_dir,
+                data_set_name,
+                curr_seed,
+                num_list[0],
+                num_list[1],
+                gt_reshape=gt_reshape,
+            )
+            logger.info(
+                'Loaded fixed split: {} train={} val={} test={}'.format(
+                    split_path,
+                    len(train_data_index),
+                    len(val_data_index),
+                    len(test_data_index)
+                )
+            )
+        else:
+            train_data_index, val_data_index, test_data_index, _ = data_load_operate.sampling(
+                ratio_list,
+                num_list,
+                gt_reshape,
+                class_count,
+                1,
+            )
         index = (train_data_index, val_data_index, test_data_index)
         train_label, val_label, test_label = data_load_operate.generate_image_iter(height, width, gt_reshape, index)
 
@@ -565,6 +651,7 @@ if __name__ == '__main__':
         x = x.unsqueeze(0).float()
         if use_tile_mode:
             tile_slices = generate_tile_slices(height, width, tile_size, tile_overlap)
+            val_points = build_labeled_points(val_label) if args.sparse_val else None
             logger.info(
                 'Tile mode enabled: tile_size={} tile_overlap={} tile_count={}'.format(
                     tile_size,
@@ -572,8 +659,16 @@ if __name__ == '__main__':
                     len(tile_slices)
                 )
             )
+            if val_points is not None:
+                logger.info(
+                    'Sparse validation enabled: val_points={} val_interval={}'.format(
+                        len(val_points['labels']),
+                        args.val_interval
+                    )
+                )
         else:
             tile_slices = None
+            val_points = None
             x = x.to(device)
 
         if class_weight_mode == 'balanced':
@@ -740,37 +835,63 @@ if __name__ == '__main__':
                         )
                     )
 
-            torch.cuda.empty_cache()
-
             # Evaluation stage
-            net.eval()
-            with torch.no_grad():
-                evaluator.reset()
-                y_val = val_label.unsqueeze(0)
-                if use_tile_mode:
-                    predict = predict_tiled(net, x, tile_slices, class_count, y_val.shape[1:])
-                else:
-                    output_val = net(x)
-                    seg_logits = resize(input=output_val, size=y_val.shape[1:], mode='bilinear', align_corners=True)
-                    predict = torch.argmax(seg_logits, dim=1).cpu().numpy()
-                Y_val_np = val_label.cpu().numpy()
-                Y_val_255 = np.where(Y_val_np == -1, 255, Y_val_np)
-                evaluator.add_batch(np.expand_dims(Y_val_255, axis=0), predict)
-                OA = evaluator.Pixel_Accuracy()
-                mIOU, IOU = evaluator.Mean_Intersection_over_Union()
-                mAcc, Acc = evaluator.Pixel_Accuracy_Class()
-                Kappa = evaluator.Kappa()
-                logger.info(get_fusion_status(net))
-                logger.info('Evaluate {}|OA:{}|AA:{}|Kappa:{}'.format(epoch, OA, mAcc, Kappa))
+            need_val_vis = args.save_vis and (epoch + 1) % 50 == 0
+            should_validate = (
+                    (epoch + 1) % args.val_interval == 0
+                    or (epoch + 1) == max_epoch
+                    or need_val_vis
+            )
+            if should_validate:
+                net.eval()
+                with torch.no_grad():
+                    if use_tile_mode and args.sparse_val and not need_val_vis:
+                        predict_sparse = predict_tiled_sparse(
+                            net,
+                            x,
+                            tile_slices,
+                            class_count,
+                            val_points
+                        )
+                        OA, mIOU, IOU, mAcc, Acc, Kappa = evaluate_sparse_prediction(
+                            evaluator,
+                            val_points,
+                            predict_sparse
+                        )
+                    else:
+                        evaluator.reset()
+                        y_val = val_label.unsqueeze(0)
+                        if use_tile_mode:
+                            predict = predict_tiled(net, x, tile_slices, class_count, y_val.shape[1:])
+                        else:
+                            output_val = net(x)
+                            seg_logits = resize(input=output_val, size=y_val.shape[1:], mode='bilinear',
+                                                align_corners=True)
+                            predict = torch.argmax(seg_logits, dim=1).cpu().numpy()
+                        Y_val_np = val_label.cpu().numpy()
+                        Y_val_255 = np.where(Y_val_np == -1, 255, Y_val_np)
+                        evaluator.add_batch(np.expand_dims(Y_val_255, axis=0), predict)
+                        OA = evaluator.Pixel_Accuracy()
+                        mIOU, IOU = evaluator.Mean_Intersection_over_Union()
+                        mAcc, Acc = evaluator.Pixel_Accuracy_Class()
+                        Kappa = evaluator.Kappa()
 
-                if OA >= best_val_acc:
-                    best_val_acc = OA
-                    torch.save(net.state_dict(), save_weight_path)
+                        if need_val_vis:
+                            save_single_predict_path = os.path.join(
+                                save_vis_folder,
+                                'predict_{}.png'.format(str(epoch + 1))
+                            )
+                            save_single_gt_path = os.path.join(save_vis_folder, 'gt.png')
+                            vis_a_image(gt, predict, save_single_predict_path, save_single_gt_path)
 
-                if args.save_vis and (epoch + 1) % 50 == 0:
-                    save_single_predict_path = os.path.join(save_vis_folder, 'predict_{}.png'.format(str(epoch + 1)))
-                    save_single_gt_path = os.path.join(save_vis_folder, 'gt.png')
-                    vis_a_image(gt, predict, save_single_predict_path, save_single_gt_path)
+                    logger.info(get_fusion_status(net))
+                    logger.info('Evaluate {}|OA:{}|AA:{}|Kappa:{}'.format(epoch, OA, mAcc, Kappa))
+
+                    if OA >= best_val_acc:
+                        best_val_acc = OA
+                        torch.save(net.state_dict(), save_weight_path)
+            else:
+                logger.info('Evaluate {} skipped|val_interval:{}'.format(epoch, args.val_interval))
 
             if scheduler is not None:
                 scheduler.step()
