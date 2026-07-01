@@ -474,9 +474,16 @@ class ImprovedBothMamba(nn.Module):
 
 class ImprovedMambaHSI(nn.Module):
     def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True, mamba_type='both',
-                 token_num=4, group_num=4):
+                 token_num=4, group_num=4, pool_size=2, cls_head_dim=128):
         super(ImprovedMambaHSI, self).__init__()
         self.mamba_type = mamba_type
+        if pool_size < 1:
+            raise ValueError("pool_size must be >= 1")
+        if hidden_dim % group_num != 0:
+            raise ValueError("hidden_dim must be divisible by group_num")
+        if cls_head_dim % group_num != 0:
+            raise ValueError("cls_head_dim must be divisible by group_num")
+        pool_layer = nn.Identity() if pool_size == 1 else nn.AvgPool2d(kernel_size=pool_size, stride=pool_size, padding=0)
 
         # Patch Embedding Layer
         self.patch_embedding = nn.Sequential(
@@ -489,28 +496,30 @@ class ImprovedMambaHSI(nn.Module):
         if mamba_type == 'spa':
             self.mamba = nn.Sequential(
                 ImprovedSpaMamba(hidden_dim, use_residual=use_residual, group_num=group_num),
-                nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
+                pool_layer,
             )
         elif mamba_type == 'spe':
             self.mamba = nn.Sequential(
                 ImprovedSpeMamba(hidden_dim, token_num=token_num, use_residual=use_residual, group_num=group_num),
-                nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
+                pool_layer,
             )
         elif mamba_type == 'both':
             self.mamba = nn.Sequential(
                 ImprovedBothMamba(hidden_dim, token_num=token_num, use_residual=use_residual, group_num=group_num),
-                nn.AvgPool2d(kernel_size=2, stride=2, padding=0),
+                pool_layer,
             )
+        else:
+            raise ValueError("Unsupported mamba_type: {}".format(mamba_type))
 
         # Replace transformer with DynamicConvBlock
         self.dynamic_conv = DynamicConvBlock(channels=hidden_dim)
 
         # Classification head
         self.cls_head = nn.Sequential(
-            nn.Conv2d(in_channels=hidden_dim, out_channels=128, kernel_size=1, stride=1, padding=0),
-            nn.GroupNorm(group_num, 128),
+            nn.Conv2d(in_channels=hidden_dim, out_channels=cls_head_dim, kernel_size=1, stride=1, padding=0),
+            nn.GroupNorm(group_num, cls_head_dim),
             nn.SiLU(),
-            nn.Conv2d(in_channels=128, out_channels=num_classes, kernel_size=1, stride=1, padding=0)
+            nn.Conv2d(in_channels=cls_head_dim, out_channels=num_classes, kernel_size=1, stride=1, padding=0)
         )
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
 
@@ -521,5 +530,4 @@ class ImprovedMambaHSI(nn.Module):
         logits = self.cls_head(x) # [B, num_classes, H/2, W/2]
         # logits = self.upsample(logits) # [B, num_classes, H, W]
         return logits
-
 

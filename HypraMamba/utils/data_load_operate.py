@@ -8,6 +8,13 @@ from sklearn.decomposition import PCA
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+def _load_first_existing(path_list, variable_name):
+    for path in path_list:
+        if os.path.exists(path):
+            return sio.loadmat(path)[variable_name]
+    raise FileNotFoundError("None of the expected files exists: {}".format(path_list))
+
+
 def applyPCA(X, numComponents=75):
     newX = np.reshape(X, (-1, X.shape[2]))
     pca = PCA(n_components=numComponents, whiten=True)
@@ -54,7 +61,24 @@ def load_data(data_set_name, data_path='./data'):
     elif data_set_name == 'Pavia':
         data = sio.loadmat(os.path.join(data_path, 'Pavia', 'Pavia.mat'))['pavia']
         labels = sio.loadmat(os.path.join(data_path, 'Pavia', 'Pavia_gt.mat'))['pavia_gt']
-        
+    elif data_set_name == 'QUH-Pingan':
+        data = sio.loadmat(os.path.join(data_path, 'QUH-Pingan', 'QUH-Pingan.mat'))['Haigang']
+        labels = _load_first_existing([
+            os.path.join(data_path, 'QUH-Pingan', 'QUH-Pingan_GT.mat'),
+            os.path.join(data_path, 'QUH-Pingan', 'QUH-Pingan_GT(1).mat'),
+        ], 'HaigangGT')
+    elif data_set_name == 'QUH-Qingyun':
+        data = sio.loadmat(os.path.join(data_path, 'QUH-Qingyun', 'QUH-Qingyun.mat'))['Chengqu']
+        labels = _load_first_existing([
+            os.path.join(data_path, 'QUH-Qingyun', 'QUH-Qingyun_GT.mat'),
+            os.path.join(data_path, 'QUH-Qingyun', 'QUH-Qingyun_GT(1).mat'),
+        ], 'ChengquGT')
+    elif data_set_name == 'QUH-Tangdaowan':
+        data = sio.loadmat(os.path.join(data_path, 'QUH-Tangdaowan', 'QUH-Tangdaowan.mat'))['Tangdaowan']
+        labels = sio.loadmat(os.path.join(data_path, 'QUH-Tangdaowan', 'QUH-Tangdaowan_GT.mat'))['TangdaowanGT']
+    else:
+        raise ValueError("Unsupported data_set_name: {}".format(data_set_name))
+
     return data, labels
 
 

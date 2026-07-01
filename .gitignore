@@ -1,0 +1,26 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local logs and checkpoints
+*.log
+*.pth
+*.pt
+*.ckpt
+
+# Local datasets and exported split caches
+data/
+datasets/
+HypraMamba/splits/
+
+# Local training outputs
+HypraMamba/RUNS*/
+
+# Paper/doc extraction byproducts
+paper_extract/
+*.wmf
+*.docx
+
+# Generated figures and LaTeX scratch files
+*.png
+*.tex

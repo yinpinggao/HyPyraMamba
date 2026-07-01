@@ -3,15 +3,18 @@ import numpy as np
 from torchvision import transforms
 
 
-def ImageStretching(image):
+def ImageStretching(image, low=2.0, high=98.0):
     channels = image.shape[2]  # 获取图像的波段数，即通道数
     band_list = []  # 用来存储每个波段处理后的数据
 
     # 对每个波段进行拉伸
     for i in range(channels):
         band_data = image[:,:,i]  # 获取当前波段的所有数据
-        band_min = np.percentile(band_data, 2)  # 获取当前波段的 2% 分位数
-        band_max = np.percentile(band_data, 98)  # 获取当前波段的 98% 分位数
+        band_min = np.percentile(band_data, low)  # 获取当前波段的低百分位
+        band_max = np.percentile(band_data, high)  # 获取当前波段的高百分位
+        if band_max == band_min:
+            band_list.append(np.zeros_like(band_data))
+            continue
         # 进行归一化，将数据拉伸到 [0, 1] 范围
         band_data = (band_data - band_min) / (band_max - band_min)
         band_list.append(band_data)  # 将处理后的波段数据添加到列表中
