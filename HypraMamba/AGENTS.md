@@ -22,6 +22,51 @@ At the moment there is no confirmed long-running `train.py` process from this re
 
 The repo also contains accumulated outputs under `RUNS/`, `RUNS_new/`, and `RUNS_raw/`.
 
+## Current QUH Main Baseline
+The strongest and most stable QUH configuration is currently:
+
+- Result directory: `RUNS_QUH_100_30_WEIGHTED_ACCUM_GROUP2`
+- Model output folder: `MambaHSI_competitive_diff_alpha0p5`
+- Protocol: QUH `100 train / 30 val / rest test` with fixed splits under `splits/quh_100_30_seed0-9`
+- Datasets: `dataset_index=10` for `QUH-Pingan`, `11` for `QUH-Qingyun`, and `12` for `QUH-Tangdaowan`
+- Preprocessing: `Gaussian sigma=1.0 -> PCA 30 -> ImageStretching(2,98)`, without PCA whitening
+- Tile training: `tile_size=512`, `tile_overlap=32`, `tile_update_groups=2`
+- Optimizer: `Adam`, `lr=0.0003`, `weight_decay=1e-5`, `scheduler=none`, `max_epoch=200`
+- Loss: `CrossEntropyLoss`, `label_smoothing=0.05`, `class_weight_mode=balanced`
+- Model knobs: `hidden_dim=128`, `token_num=4`, `group_num=4`, `pool_size=2`, `high_res_skip=none`, `prca_num_scales=3`, `prca_num_layers=2`, `prca_num_heads=4`, `pyramid_dilation=3`, `spectral_diff_alpha=0.5`
+- Checkpoint selection: validation OA unless an experiment explicitly changes `--checkpoint_metric`
+
+The verified 10-seed means for this baseline are:
+
+- `QUH-Pingan`: `OA 94.97 ± 0.50 / AA 95.43 ± 0.73 / Kpp 92.61 ± 0.73 / mIOU_test 80.57 ± 1.86`
+- `QUH-Qingyun`: `OA 90.70 ± 1.06 / AA 92.25 ± 0.85 / Kpp 87.78 ± 1.38 / mIOU_test 78.20 ± 1.42`
+- `QUH-Tangdaowan`: `OA 95.92 ± 0.45 / AA 97.78 ± 0.20 / Kpp 95.39 ± 0.50 / mIOU_test 88.07 ± 2.07`
+
+Use this baseline as the default when the user asks to run the current best QUH setup:
+
+```bash
+CUDA_VISIBLE_DEVICES=<gpu> nohup python -u train.py \
+  --dataset_index <10|11|12> \
+  --data_set_path ./data \
+  --split_dir ./splits/quh_100_30_seed0-9 \
+  --exp_name RUNS_QUH_100_30_WEIGHTED_ACCUM_GROUP2 \
+  --train_samples 100 \
+  --val_samples 30 \
+  --seed_list 0,1,2,3,4,5,6,7,8,9 \
+  --tile_size 512 \
+  --tile_overlap 32 \
+  --tile_update_groups 2 \
+  --optimizer adam \
+  --scheduler none \
+  --lr 0.0003 \
+  --weight_decay 1e-5 \
+  --label_smoothing 0.05 \
+  --class_weight_mode balanced \
+  > logs/<name>.log 2>&1 &
+```
+
+Do not replace this baseline with HS4M-style recipe changes, PCA whitening, `token_num=8`, core-only tile loss, high-res shallow fusion, or multiple stacked tricks unless a full three-dataset 10-seed comparison shows a clear gain with acceptable runtime. Follow the rule from `经验教训.md`: keep `WEIGHTED_ACCUM_GROUP2` as the main line, change one primary variable at a time, and record OA, AA, Kappa, mIoU, and training time.
+
 ## Current Model Architecture
 `train.py` currently builds `ImprovedMambaHSI` with PCA-preprocessed 30-band input, `hidden_dim=128`, `token_num=4`, `group_num=4`, dual spatial/spectral branches, and competitive channel fusion.
 
@@ -55,7 +100,7 @@ Supported ablations in `model/MambaHSI.py` are:
 - The default training configuration (`hidden_dim=128`, `token_num=4`, `group_num=4`, `num_heads=4`) satisfies those divisibility assumptions. Non-divisible experimental settings can still fail at `GroupNorm` or `einops.rearrange`.
 
 ## Training, Testing, and Review
-Default training here is `Adam(lr=3e-4, weight_decay=1e-5)`, 200 epochs, `train_samples=30`, `val_samples=10`, and 10 seeds. The loss is cross-entropy. `indian` can use balanced class weights when `--class_weight_mode auto` or `balanced` is selected. The best checkpoint is selected by validation OA, then tested and written to `result_*.txt` and `mean_result.txt`.
+Default QUH training follows the `RUNS_QUH_100_30_WEIGHTED_ACCUM_GROUP2` configuration above. For older non-QUH datasets, check the CLI defaults and the intended protocol before launching; do not assume QUH `100/30` or legacy `30/10` applies universally. The loss is cross-entropy. `indian` can use balanced class weights when `--class_weight_mode auto` or `balanced` is selected. The best checkpoint is selected by validation OA by default, then tested and written to `result_*.txt` and `mean_result.txt`.
 
 Logits are upsampled back to label resolution with `bilinear` interpolation. Training loss uses `align_corners=False` through `head_loss`; validation and test explicitly use `align_corners=True` in `train.py`.
 

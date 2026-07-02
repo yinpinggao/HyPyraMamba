@@ -59,6 +59,75 @@ def compute_balanced_class_weights(train_label, class_count, target_device):
 
     return class_weights.to(target_device), class_counts.long().tolist()
 
+
+def parse_class_weight_multipliers(value):
+    if value is None:
+        return {}
+    value = value.strip()
+    if value == '' or value.lower() in ('none', 'off', 'false'):
+        return {}
+
+    multipliers = {}
+    for item in value.split(','):
+        item = item.strip()
+        if not item:
+            continue
+        if ':' not in item:
+            raise argparse.ArgumentTypeError(
+                'Expected class multipliers like "6:1.15,16:1.20".'
+            )
+        class_id_text, multiplier_text = item.split(':', 1)
+        try:
+            class_id = int(class_id_text.strip())
+            multiplier = float(multiplier_text.strip())
+        except ValueError:
+            raise argparse.ArgumentTypeError(
+                'Expected integer class id and float multiplier in "{}".'.format(item)
+            )
+        if class_id <= 0:
+            raise argparse.ArgumentTypeError('Class ids are 1-based and must be positive.')
+        if multiplier <= 0:
+            raise argparse.ArgumentTypeError('Class weight multipliers must be positive.')
+        multipliers[class_id - 1] = multiplier
+    return multipliers
+
+
+def format_class_weight_multipliers(multipliers):
+    return {
+        class_idx + 1: multiplier
+        for class_idx, multiplier in sorted(multipliers.items())
+    }
+
+
+def build_loss_weights(train_label, class_count, class_weight_mode, class_weight_multipliers, target_device):
+    valid_labels = train_label[train_label >= 0].long().view(-1)
+    class_counts = torch.bincount(valid_labels, minlength=class_count).float()
+
+    if class_weight_mode == 'balanced':
+        class_weights = torch.zeros(class_count, dtype=torch.float32)
+        nonzero_mask = class_counts > 0
+        if nonzero_mask.any():
+            total_valid = class_counts[nonzero_mask].sum()
+            class_weights[nonzero_mask] = total_valid / (nonzero_mask.sum() * class_counts[nonzero_mask])
+    else:
+        class_weights = torch.ones(class_count, dtype=torch.float32)
+
+    for class_idx, multiplier in class_weight_multipliers.items():
+        if class_idx < 0 or class_idx >= class_count:
+            raise ValueError(
+                '--class_weight_multipliers contains class {}, but {} has only {} classes.'.format(
+                    class_idx + 1,
+                    data_set_name,
+                    class_count
+                )
+            )
+        class_weights[class_idx] *= multiplier
+
+    if class_weight_mode == 'none' and len(class_weight_multipliers) == 0:
+        return None, class_counts.long().tolist()
+    return class_weights.to(target_device), class_counts.long().tolist()
+
+
 def str2bool(value):
     if isinstance(value, bool):
         return value
@@ -131,9 +200,6 @@ def validate_args(args, parser):
         parser.error('--tile_overlap must be smaller than --tile_size.')
     if args.tile_update_groups <= 0:
         parser.error('--tile_update_groups must be a positive integer.')
-    if args.val_interval <= 0:
-        parser.error('--val_interval must be a positive integer.')
-
 
 def get_parser():
     parser = argparse.ArgumentParser()
@@ -147,8 +213,8 @@ def get_parser():
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamw'])
     parser.add_argument('--scheduler', type=str, default='none', choices=['none', 'cosine'])
     parser.add_argument('--cosine_eta_min', type=float, default=0.0)
-    parser.add_argument('--train_samples', type=int, default=30)
-    parser.add_argument('--val_samples', type=int, default=10)
+    parser.add_argument('--train_samples', type=int, default=100)
+    parser.add_argument('--val_samples', type=int, default=30)
     parser.add_argument('--split_dir', type=str, default='./splits/quh_100_30_seed0-9')
     parser.add_argument('--seed_list', type=parse_int_list, default=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
     parser.add_argument('--exp_name', type=str, default='RUNS')
@@ -156,6 +222,19 @@ def get_parser():
     parser.add_argument('--save_vis', type=str2bool, default=False)
     parser.add_argument('--label_smoothing', type=float, default=0.05)
     parser.add_argument('--class_weight_mode', type=str, default='balanced', choices=['auto', 'none', 'balanced'])
+    parser.add_argument(
+        '--class_weight_multipliers',
+        type=parse_class_weight_multipliers,
+        default={},
+        help='Optional 1-based class loss multipliers, e.g. "6:1.15,16:1.20".'
+    )
+    parser.add_argument(
+        '--checkpoint_metric',
+        type=str,
+        default='oa',
+        choices=['oa', 'aa', 'miou', 'kappa'],
+        help='Validation metric used to select the best checkpoint.'
+    )
     parser.add_argument('--pca_components', type=int, default=30)
     parser.add_argument('--gaussian_sigma', type=float, default=1.0)
     parser.add_argument('--stretch_low', type=float, default=2.0)
@@ -182,11 +261,9 @@ def get_parser():
     parser.add_argument('--outer_residual_mode', type=str, default='standard', choices=sorted(VALID_OUTER_RESIDUAL_MODES))
     parser.add_argument('--outer_residual_alpha', type=float, default=1.0)
     parser.add_argument('--spectral_diff_alpha', type=float, default=0.5)
-    parser.add_argument('--tile_size', type=int, default=0)
+    parser.add_argument('--tile_size', type=int, default=512)
     parser.add_argument('--tile_overlap', type=int, default=32)
-    parser.add_argument('--tile_update_groups', type=int, default=1)
-    parser.add_argument('--val_interval', type=int, default=1)
-    parser.add_argument('--sparse_val', type=str2bool, default=True)
+    parser.add_argument('--tile_update_groups', type=int, default=2)
 
     args = parser.parse_args()
     validate_args(args, parser)
@@ -270,6 +347,8 @@ paras_dict = {
     'fusion_mode': FUSION_NAME,
     'ablation': args.ablation,
     'class_weight_mode': class_weight_mode,
+    'class_weight_multipliers': format_class_weight_multipliers(args.class_weight_multipliers),
+    'checkpoint_metric': args.checkpoint_metric,
     'pca_components': args.pca_components,
     'gaussian_sigma': args.gaussian_sigma,
     'stretch_low': args.stretch_low,
@@ -298,8 +377,6 @@ paras_dict = {
     'tile_size': tile_size,
     'tile_overlap': tile_overlap,
     'tile_update_groups': args.tile_update_groups,
-    'val_interval': args.val_interval,
-    'sparse_val': args.sparse_val,
     'save_vis': args.save_vis,
 }
 
@@ -353,6 +430,18 @@ def build_scheduler(optimizer, scheduler_name, max_epochs, eta_min):
     raise ValueError('Unsupported scheduler: {}'.format(scheduler_name))
 
 
+def select_checkpoint_score(metric_name, oa, aa, miou, kappa):
+    if metric_name == 'oa':
+        return oa
+    if metric_name == 'aa':
+        return aa
+    if metric_name == 'miou':
+        return miou
+    if metric_name == 'kappa':
+        return kappa
+    raise ValueError('Unsupported checkpoint metric: {}'.format(metric_name))
+
+
 def compute_train_loss(net, input_tensor, label_tensor, loss_func):
     pred = net(input_tensor)
     return head_loss(loss_func, pred, label_tensor.long())
@@ -379,21 +468,6 @@ def generate_tile_slices(height, width, tile_size, overlap):
     ]
 
 
-def build_labeled_points(label_tensor):
-    if torch.is_tensor(label_tensor):
-        label_np = label_tensor.detach().cpu().numpy()
-    else:
-        label_np = np.asarray(label_tensor)
-    rows, cols = np.nonzero(label_np >= 0)
-    if len(rows) == 0:
-        raise RuntimeError('No labeled pixels available for sparse evaluation.')
-    return {
-        'rows': rows.astype(np.int64),
-        'cols': cols.astype(np.int64),
-        'labels': label_np[rows, cols].astype(np.int64),
-    }
-
-
 def count_labeled_pixels_in_tile(label_tensor, tile_slice):
     y0, y1, x0, x1 = tile_slice
     return int((label_tensor[y0:y1, x0:x1] >= 0).sum().item())
@@ -416,7 +490,14 @@ def _build_balanced_tile_groups(train_tiles, group_count):
     return [group for group in groups if len(group) > 0]
 
 
-def train_one_epoch_tiled(net, x_cpu, train_label_cpu, tile_slices, loss_func, optimizer, tile_update_groups):
+def train_one_epoch_tiled(
+        net,
+        x_cpu,
+        train_label_cpu,
+        tile_slices,
+        loss_func,
+        optimizer,
+        tile_update_groups):
     train_tiles = []
     for tile_slice in tile_slices:
         valid_pixels = count_labeled_pixels_in_tile(train_label_cpu, tile_slice)
@@ -445,7 +526,12 @@ def train_one_epoch_tiled(net, x_cpu, train_label_cpu, tile_slices, loss_func, o
             label_tile = y_train[:, y0:y1, x0:x1].to(device)
 
             with autocast(enabled=device.type == 'cuda'):
-                loss = compute_train_loss(net, input_tile, label_tile, loss_func)
+                loss = compute_train_loss(
+                    net,
+                    input_tile,
+                    label_tile,
+                    loss_func
+                )
                 group_loss_weight = valid_pixels / group_valid_pixels
                 weighted_loss = loss * group_loss_weight
 
@@ -490,53 +576,6 @@ def predict_tiled(net, x_cpu, tile_slices, class_count, output_size):
     return np.expand_dims(np.argmax(logit_sum, axis=0), axis=0)
 
 
-def predict_tiled_sparse(net, x_cpu, tile_slices, class_count, labeled_points):
-    rows = labeled_points['rows']
-    cols = labeled_points['cols']
-    logit_sum = np.zeros((len(rows), class_count), dtype=np.float32)
-    logit_count = np.zeros(len(rows), dtype=np.float32)
-
-    for tile_slice in tile_slices:
-        y0, y1, x0, x1 = tile_slice
-        point_mask = (rows >= y0) & (rows < y1) & (cols >= x0) & (cols < x1)
-        if not np.any(point_mask):
-            continue
-
-        input_tile = x_cpu[:, :, y0:y1, x0:x1].to(device)
-        local_rows = torch.as_tensor(rows[point_mask] - y0, dtype=torch.long, device=device)
-        local_cols = torch.as_tensor(cols[point_mask] - x0, dtype=torch.long, device=device)
-
-        with autocast(enabled=device.type == 'cuda'):
-            output_tile = net(input_tile)
-            seg_logits_tile = resize(
-                input=output_tile,
-                size=(y1 - y0, x1 - x0),
-                mode='bilinear',
-                align_corners=True
-            )
-
-        point_logits = seg_logits_tile[0, :, local_rows, local_cols].transpose(0, 1)
-        logit_sum[point_mask] += point_logits.float().cpu().numpy()
-        logit_count[point_mask] += 1.0
-
-        del input_tile, local_rows, local_cols, output_tile, seg_logits_tile, point_logits
-
-    if np.any(logit_count == 0):
-        raise RuntimeError('Sparse tiled prediction missed labeled pixels.')
-    logit_sum /= logit_count[:, None]
-    return np.argmax(logit_sum, axis=1).astype(np.int64)
-
-
-def evaluate_sparse_prediction(evaluator, labeled_points, prediction):
-    evaluator.reset()
-    evaluator.add_batch(labeled_points['labels'][None, :], prediction[None, :])
-    oa = evaluator.Pixel_Accuracy()
-    miou, iou = evaluator.Mean_Intersection_over_Union()
-    macc, acc = evaluator.Pixel_Accuracy_Class()
-    kappa = evaluator.Kappa()
-    return oa, miou, iou, macc, acc, kappa
-
-
 def count_parameters(model):
     total_params = sum(param.numel() for param in model.parameters())
     trainable_params = sum(param.numel() for param in model.parameters() if param.requires_grad)
@@ -570,6 +609,7 @@ if __name__ == '__main__':
 
     data_filtered = gaussian_filter(data, sigma=args.gaussian_sigma)
 
+    logger.info('PCA enabled: pca_components={}'.format(args.pca_components))
     pca = PCA(n_components=args.pca_components)
     data_reshaped = data_filtered.reshape(-1, data_filtered.shape[2])
     data_pca = pca.fit_transform(data_reshaped)
@@ -651,7 +691,7 @@ if __name__ == '__main__':
         x = x.unsqueeze(0).float()
         if use_tile_mode:
             tile_slices = generate_tile_slices(height, width, tile_size, tile_overlap)
-            val_points = build_labeled_points(val_label) if args.sparse_val else None
+            train_tile_slices = tile_slices
             logger.info(
                 'Tile mode enabled: tile_size={} tile_overlap={} tile_count={}'.format(
                     tile_size,
@@ -659,29 +699,34 @@ if __name__ == '__main__':
                     len(tile_slices)
                 )
             )
-            if val_points is not None:
-                logger.info(
-                    'Sparse validation enabled: val_points={} val_interval={}'.format(
-                        len(val_points['labels']),
-                        args.val_interval
-                    )
-                )
         else:
             tile_slices = None
-            val_points = None
+            train_tile_slices = None
             x = x.to(device)
 
-        if class_weight_mode == 'balanced':
-            class_weights, class_counts = compute_balanced_class_weights(train_label, class_count, device)
-            loss_func = torch.nn.CrossEntropyLoss(
-                ignore_index=-1,
-                weight=class_weights,
-                label_smoothing=label_smoothing
-            )
-            logger.info('train_class_counts: {}'.format(class_counts))
-            logger.info('class_weights: {}'.format([round(v, 4) for v in class_weights.detach().cpu().tolist()]))
+        class_weights, class_counts = build_loss_weights(
+            train_label,
+            class_count,
+            class_weight_mode,
+            args.class_weight_multipliers,
+            device
+        )
+        loss_func = torch.nn.CrossEntropyLoss(
+            ignore_index=-1,
+            weight=class_weights,
+            label_smoothing=label_smoothing
+        )
+        logger.info('train_class_counts: {}'.format(class_counts))
+        if class_weights is None:
+            logger.info('class_weights: None')
         else:
-            loss_func = torch.nn.CrossEntropyLoss(ignore_index=-1, label_smoothing=label_smoothing)
+            logger.info('class_weights: {}'.format([round(v, 4) for v in class_weights.detach().cpu().tolist()]))
+        if len(args.class_weight_multipliers) > 0:
+            logger.info(
+                'class_weight_multipliers(1-based): {}'.format(
+                    format_class_weight_multipliers(args.class_weight_multipliers)
+                )
+            )
 
         if not use_tile_mode:
             train_label = train_label.to(device)
@@ -717,7 +762,7 @@ if __name__ == '__main__':
                 logger.info('FLOPs are tool estimates; verify Mamba custom ops support before reporting them.')
 
         tic1 = time.perf_counter()
-        best_val_acc = 0
+        best_val_score = -float('inf')
         for epoch in range(max_epoch):
             y_train = train_label.unsqueeze(0)
 
@@ -728,7 +773,7 @@ if __name__ == '__main__':
                     net,
                     x,
                     train_label,
-                    tile_slices,
+                    train_tile_slices,
                     loss_func,
                     optimizer,
                     args.tile_update_groups
@@ -837,61 +882,50 @@ if __name__ == '__main__':
 
             # Evaluation stage
             need_val_vis = args.save_vis and (epoch + 1) % 50 == 0
-            should_validate = (
-                    (epoch + 1) % args.val_interval == 0
-                    or (epoch + 1) == max_epoch
-                    or need_val_vis
-            )
-            if should_validate:
-                net.eval()
-                with torch.no_grad():
-                    if use_tile_mode and args.sparse_val and not need_val_vis:
-                        predict_sparse = predict_tiled_sparse(
-                            net,
-                            x,
-                            tile_slices,
-                            class_count,
-                            val_points
-                        )
-                        OA, mIOU, IOU, mAcc, Acc, Kappa = evaluate_sparse_prediction(
-                            evaluator,
-                            val_points,
-                            predict_sparse
-                        )
-                    else:
-                        evaluator.reset()
-                        y_val = val_label.unsqueeze(0)
-                        if use_tile_mode:
-                            predict = predict_tiled(net, x, tile_slices, class_count, y_val.shape[1:])
-                        else:
-                            output_val = net(x)
-                            seg_logits = resize(input=output_val, size=y_val.shape[1:], mode='bilinear',
-                                                align_corners=True)
-                            predict = torch.argmax(seg_logits, dim=1).cpu().numpy()
-                        Y_val_np = val_label.cpu().numpy()
-                        Y_val_255 = np.where(Y_val_np == -1, 255, Y_val_np)
-                        evaluator.add_batch(np.expand_dims(Y_val_255, axis=0), predict)
-                        OA = evaluator.Pixel_Accuracy()
-                        mIOU, IOU = evaluator.Mean_Intersection_over_Union()
-                        mAcc, Acc = evaluator.Pixel_Accuracy_Class()
-                        Kappa = evaluator.Kappa()
+            net.eval()
+            with torch.no_grad():
+                evaluator.reset()
+                y_val = val_label.unsqueeze(0)
+                if use_tile_mode:
+                    predict = predict_tiled(net, x, tile_slices, class_count, y_val.shape[1:])
+                else:
+                    output_val = net(x)
+                    seg_logits = resize(input=output_val, size=y_val.shape[1:], mode='bilinear',
+                                        align_corners=True)
+                    predict = torch.argmax(seg_logits, dim=1).cpu().numpy()
+                Y_val_np = val_label.cpu().numpy()
+                Y_val_255 = np.where(Y_val_np == -1, 255, Y_val_np)
+                evaluator.add_batch(np.expand_dims(Y_val_255, axis=0), predict)
+                OA = evaluator.Pixel_Accuracy()
+                mIOU, IOU = evaluator.Mean_Intersection_over_Union()
+                mAcc, Acc = evaluator.Pixel_Accuracy_Class()
+                Kappa = evaluator.Kappa()
+                checkpoint_score = select_checkpoint_score(args.checkpoint_metric, OA, mAcc, mIOU, Kappa)
 
-                        if need_val_vis:
-                            save_single_predict_path = os.path.join(
-                                save_vis_folder,
-                                'predict_{}.png'.format(str(epoch + 1))
-                            )
-                            save_single_gt_path = os.path.join(save_vis_folder, 'gt.png')
-                            vis_a_image(gt, predict, save_single_predict_path, save_single_gt_path)
+                if need_val_vis:
+                    save_single_predict_path = os.path.join(
+                        save_vis_folder,
+                        'predict_{}.png'.format(str(epoch + 1))
+                    )
+                    save_single_gt_path = os.path.join(save_vis_folder, 'gt.png')
+                    vis_a_image(gt, predict, save_single_predict_path, save_single_gt_path)
 
-                    logger.info(get_fusion_status(net))
-                    logger.info('Evaluate {}|OA:{}|AA:{}|Kappa:{}'.format(epoch, OA, mAcc, Kappa))
+                logger.info(get_fusion_status(net))
+                logger.info(
+                    'Evaluate {}|OA:{}|AA:{}|mIOU:{}|Kappa:{}|checkpoint_metric:{}|score:{}'.format(
+                        epoch,
+                        OA,
+                        mAcc,
+                        mIOU,
+                        Kappa,
+                        args.checkpoint_metric,
+                        checkpoint_score
+                    )
+                )
 
-                    if OA >= best_val_acc:
-                        best_val_acc = OA
-                        torch.save(net.state_dict(), save_weight_path)
-            else:
-                logger.info('Evaluate {} skipped|val_interval:{}'.format(epoch, args.val_interval))
+                if checkpoint_score >= best_val_score:
+                    best_val_score = checkpoint_score
+                    torch.save(net.state_dict(), save_weight_path)
 
             if scheduler is not None:
                 scheduler.step()
