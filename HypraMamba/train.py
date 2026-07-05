@@ -625,6 +625,7 @@ if __name__ == '__main__':
     OA_ALL = []
     AA_ALL = []
     KPP_ALL = []
+    MIOU_ALL = []
     EACH_ACC_ALL = []
     Train_Time_ALL = []
     Test_Time_ALL = []
@@ -996,6 +997,7 @@ if __name__ == '__main__':
         OA_ALL.append(OA_test)
         AA_ALL.append(mAcc_test)
         KPP_ALL.append(Kappa_test)
+        MIOU_ALL.append(mIOU_test)
         EACH_ACC_ALL.append(Acc_test)
         Train_Time_ALL.append(train_time)
         Test_Time_ALL.append(test_time)
@@ -1005,6 +1007,7 @@ if __name__ == '__main__':
     OA_ALL = np.array(OA_ALL)
     AA_ALL = np.array(AA_ALL)
     KPP_ALL = np.array(KPP_ALL)
+    MIOU_ALL = np.array(MIOU_ALL)
     EACH_ACC_ALL = np.array(EACH_ACC_ALL)
     Train_Time_ALL = np.array(Train_Time_ALL)
     Test_Time_ALL = np.array(Test_Time_ALL)
@@ -1015,9 +1018,11 @@ if __name__ == '__main__':
     logger.info('List of OA: {}'.format(list(OA_ALL)))
     logger.info('List of AA: {}'.format(list(AA_ALL)))
     logger.info('List of KPP: {}'.format(list(KPP_ALL)))
+    logger.info('List of mIOU: {}'.format(list(MIOU_ALL)))
     logger.info('OA: {:.2f} ± {:.2f}'.format(np.mean(OA_ALL) * 100, np.std(OA_ALL) * 100))
     logger.info('AA: {:.2f} ± {:.2f}'.format(np.mean(AA_ALL) * 100, np.std(AA_ALL) * 100))
     logger.info('Kpp: {:.2f} ± {:.2f}'.format(np.mean(KPP_ALL) * 100, np.std(KPP_ALL) * 100))
+    logger.info('mIOU: {:.2f} ± {:.2f}'.format(np.mean(MIOU_ALL) * 100, np.std(MIOU_ALL) * 100))
     logger.info('Acc per class: {} ± {}'.format(
         np.round(np.mean(EACH_ACC_ALL, 0) * 100, decimals=2).tolist(),
         np.round(np.std(EACH_ACC_ALL, 0) * 100, decimals=2).tolist()
@@ -1049,9 +1054,11 @@ if __name__ == '__main__':
                       + '\nList of OA:' + str(list(OA_ALL)) \
                       + '\nList of AA:' + str(list(AA_ALL)) \
                       + '\nList of KPP:' + str(list(KPP_ALL)) \
+                      + '\nList of mIOU:' + str(list(MIOU_ALL)) \
                       + '\nOA=' + str(round(np.mean(OA_ALL) * 100, 2)) + '+-' + str(round(np.std(OA_ALL) * 100, 2)) \
                       + '\nAA=' + str(round(np.mean(AA_ALL) * 100, 2)) + '+-' + str(round(np.std(AA_ALL) * 100, 2)) \
                       + '\nKpp=' + str(round(np.mean(KPP_ALL) * 100, 2)) + '+-' + str(round(np.std(KPP_ALL) * 100, 2)) \
+                      + '\nmIOU_test=' + str(round(np.mean(MIOU_ALL) * 100, 2)) + '+-' + str(round(np.std(MIOU_ALL) * 100, 2)) \
                       + '\nAcc per class=\n' + str(np.round(np.mean(EACH_ACC_ALL, 0) * 100, 2)) + '+-' + str(
             np.round(np.std(EACH_ACC_ALL, 0) * 100, 2)) \
                       + "\nAverage training time(s)=" + str(np.round(np.mean(Train_Time_ALL), decimals=2)) + '+-' + str(
