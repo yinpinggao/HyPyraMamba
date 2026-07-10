@@ -1,0 +1,21 @@
+{
+  "dataset": "QUH-Tangdaowan",
+  "source_data": "/data2/gyp/HyPyraMamba/HypraMamba/data/QUH-Tangdaowan/QUH-Tangdaowan.mat",
+  "source_gt": "/data2/gyp/HyPyraMamba/HypraMamba/data/QUH-Tangdaowan/QUH-Tangdaowan_GT.mat",
+  "bands_zero_based_rgb": [
+    90,
+    50,
+    20
+  ],
+  "bands_one_based_rgb": [
+    91,
+    51,
+    21
+  ],
+  "stretch": "per-channel percentile 2-98 to uint8",
+  "false_color_full": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/run5_seed5/false_color_full_b90_b50_b20.png",
+  "false_color_mask": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/run5_seed5/false_color_mask_b90_b50_b20.png",
+  "height": 1740,
+  "width": 860,
+  "bands": 176
+}

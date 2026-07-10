@@ -1,0 +1,15 @@
+{
+  "dataset": "QUH-Tangdaowan",
+  "source": "/data2/gyp/HyPyraMamba/HypraMamba/data/QUH-Tangdaowan/QUH-Tangdaowan.mat",
+  "spectral_faces": "derived from original 176 spectral bands: top uses center row x bands, side uses center column x bands, then percentile stretch and heatmap",
+  "front_rgb_bands_one_based": [
+    91,
+    51,
+    21
+  ],
+  "outputs": {
+    "no_outline": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_spectral_cube_no_outline.png",
+    "no_outline_transparent": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_spectral_cube_no_outline_transparent.png",
+    "soft_outline": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_spectral_cube_soft_outline.png"
+  }
+}

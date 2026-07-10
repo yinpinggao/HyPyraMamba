@@ -1,0 +1,21 @@
+{
+  "dataset": "QUH-Tangdaowan",
+  "source_gt": "/data2/gyp/HyPyraMamba/HypraMamba/data/QUH-Tangdaowan/QUH-Tangdaowan_GT.mat",
+  "palette": "spectral.spy_colors, same as prediction maps",
+  "original_gt_shape_hw": [
+    1740,
+    860
+  ],
+  "full_output": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_gt_spycolors.png",
+  "same_size_as_prediction_output": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_gt_same_size_as_prediction.png",
+  "prediction_reference": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/run5_seed5/pred_mask.png",
+  "prediction_reference_size_wh": [
+    860,
+    1740
+  ],
+  "panel_h520_aspect_output": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_gt_panel_h520_aspect.png",
+  "panel_h520_size_wh": [
+    257,
+    520
+  ]
+}

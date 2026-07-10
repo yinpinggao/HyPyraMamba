@@ -1,0 +1,22 @@
+{
+  "dataset": "QUH-Tangdaowan",
+  "source": "/data2/gyp/HyPyraMamba/HypraMamba/data/QUH-Tangdaowan/QUH-Tangdaowan.mat",
+  "preprocess": "gaussian_filter sigma=1.0 then sklearn PCA n_components=30 randomized random_state=0",
+  "front_face": "PCA components 1/2/3 as RGB, percentile stretched",
+  "spectral_faces": "derived from 30 PCA components: top uses center row x 30 components, side uses center column x 30 components",
+  "outputs": {
+    "transparent": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_spectral_cube_pca30_no_outline_transparent.png",
+    "white": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_spectral_cube_pca30_no_outline.png"
+  },
+  "input_shape": [
+    1740,
+    860,
+    176
+  ],
+  "pca_shape": [
+    1740,
+    860,
+    30
+  ],
+  "explained_variance_ratio_sum": 0.9999973773956299
+}

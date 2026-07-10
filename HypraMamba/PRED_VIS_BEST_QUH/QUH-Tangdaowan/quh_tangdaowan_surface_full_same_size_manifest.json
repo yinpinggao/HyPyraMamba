@@ -1,0 +1,16 @@
+{
+  "dataset": "QUH-Tangdaowan",
+  "intent": "flat surface image resized to exactly the same 909x790 image size as the polished cube",
+  "source_surface": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/run5_seed5/false_color_full_b90_b50_b20.png",
+  "reference_size_image": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_spectral_cube_polished_transparent.png",
+  "rgb_bands_one_based": [
+    91,
+    51,
+    21
+  ],
+  "size": [
+    909,
+    790
+  ],
+  "output": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_surface_full_same_size.png"
+}

@@ -1,0 +1,16 @@
+{
+  "dataset": "QUH-Tangdaowan",
+  "source": "/data2/gyp/HyPyraMamba/HypraMamba/data/QUH-Tangdaowan/QUH-Tangdaowan.mat",
+  "visual_intent": "same original spectral-face style as no_outline version, but thinner cube depth",
+  "front_rgb_bands_one_based": [
+    91,
+    51,
+    21
+  ],
+  "spectral_face_bands": 176,
+  "visual_depth_pixels": 150,
+  "outputs": {
+    "transparent": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_spectral_cube_original_style_thin_transparent.png",
+    "white": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_spectral_cube_original_style_thin.png"
+  }
+}

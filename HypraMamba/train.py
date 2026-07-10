@@ -582,6 +582,25 @@ def count_parameters(model):
     return total_params, trainable_params
 
 
+def flops_to_giga(value):
+    if isinstance(value, (int, float)):
+        return float(value) / 1e9
+
+    text = str(value).strip().replace(',', '')
+    parts = text.split()
+    number = float(parts[0])
+    unit = parts[1].lower() if len(parts) > 1 else ''
+    if unit.startswith('t'):
+        return number * 1e3
+    if unit.startswith('g'):
+        return number
+    if unit.startswith('m'):
+        return number / 1e3
+    if unit.startswith('k'):
+        return number / 1e6
+    return number / 1e9
+
+
 def get_fusion_status(model):
     return 'Fusion mode: {}'.format(FUSION_NAME)
 
@@ -631,6 +650,7 @@ if __name__ == '__main__':
     Test_Time_ALL = []
     total_params_m = None
     trainable_params_m = None
+    flops_g_per_pixel = None
     evaluator = Evaluator(num_class=class_count)
 
     for exp_idx, curr_seed in enumerate(seed_list):
@@ -758,8 +778,14 @@ if __name__ == '__main__':
                 else:
                     flops_shape = (1, x.shape[1], x.shape[2], x.shape[3])
                 flops, macs1, para = calculate_flops(model=net, input_shape=flops_shape)
+                flops_g = flops_to_giga(flops)
+                flops_pixels = flops_shape[2] * flops_shape[3]
+                flops_g_per_pixel = flops_g / flops_pixels
                 logger.info('calflops para: {}'.format(para))
                 logger.info('calflops flops: {}'.format(flops))
+                logger.info('FLOPs input shape: {}'.format(flops_shape))
+                logger.info('FLOPs normalized pixels: {}'.format(flops_pixels))
+                logger.info('FLOPs(G): {:.10f}'.format(flops_g_per_pixel))
                 logger.info('FLOPs are tool estimates; verify Mamba custom ops support before reporting them.')
 
         tic1 = time.perf_counter()
@@ -988,6 +1014,9 @@ if __name__ == '__main__':
                       + '\nmIOU_test:' + str(mIOU_test) \
                       + "\nIOU_test:" + str(IOU_test) \
                       + "\nAcc_test:" + str(Acc_test) \
+                      + "\nParas(M)=" + str(round(total_params_m, 6)) \
+                      + "\nTrainable Paras(M)=" + str(round(trainable_params_m, 6)) \
+                      + "\nFLOPs(G)=" + (str(round(flops_g_per_pixel, 10)) if flops_g_per_pixel is not None else 'None') \
                       + "\nTrain time(s)=" + str(train_time) \
                       + "\nTest time(s)=" + str(test_time) + "\n"
         logger.info(str_results)
@@ -1051,6 +1080,7 @@ if __name__ == '__main__':
         str_results = '\n\n***************Mean result of ' + str(len(seed_list)) + ' times runs ********************' \
                       + '\nParas(M)=' + str(round(total_params_m, 6)) \
                       + '\nTrainable Paras(M)=' + str(round(trainable_params_m, 6)) \
+                      + '\nFLOPs(G)=' + (str(round(flops_g_per_pixel, 10)) if flops_g_per_pixel is not None else 'None') \
                       + '\nList of OA:' + str(list(OA_ALL)) \
                       + '\nList of AA:' + str(list(AA_ALL)) \
                       + '\nList of KPP:' + str(list(KPP_ALL)) \

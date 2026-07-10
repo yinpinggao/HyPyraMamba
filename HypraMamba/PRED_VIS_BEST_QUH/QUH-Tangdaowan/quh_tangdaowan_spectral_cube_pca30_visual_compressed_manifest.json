@@ -1,0 +1,23 @@
+{
+  "dataset": "QUH-Tangdaowan",
+  "source": "/data2/gyp/HyPyraMamba/HypraMamba/data/QUH-Tangdaowan/QUH-Tangdaowan.mat",
+  "preprocess": "gaussian_filter sigma=1.0 then PCA n_components=30",
+  "visual_intent": "front keeps original false-color image; spectral depth is visually compressed to 30 PCA components",
+  "front_rgb_bands_one_based": [
+    91,
+    51,
+    21
+  ],
+  "pca_components": 30,
+  "visual_depth_pixels": 118,
+  "input_shape": [
+    1740,
+    860,
+    176
+  ],
+  "explained_variance_ratio_sum": 0.9999973773956299,
+  "outputs": {
+    "transparent": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_spectral_cube_pca30_visual_compressed_transparent.png",
+    "white": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_spectral_cube_pca30_visual_compressed.png"
+  }
+}

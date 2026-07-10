@@ -1,0 +1,23 @@
+{
+  "dataset": "QUH-Tangdaowan",
+  "intent": "front surface only, same 909x790 canvas as quh_tangdaowan_spectral_cube_polished_transparent.png",
+  "source_surface": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/run5_seed5/false_color_full_b90_b50_b20.png",
+  "reference_size_image": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_spectral_cube_polished_transparent.png",
+  "rgb_bands_one_based": [
+    91,
+    51,
+    21
+  ],
+  "size": [
+    909,
+    790
+  ],
+  "front_box_xywh": [
+    70,
+    234,
+    486,
+    486
+  ],
+  "transparent_background": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_surface_polished_same_size_transparent.png",
+  "white_background": "/data2/gyp/HyPyraMamba/HypraMamba/PRED_VIS_BEST_QUH/QUH-Tangdaowan/quh_tangdaowan_surface_polished_same_size.png"
+}

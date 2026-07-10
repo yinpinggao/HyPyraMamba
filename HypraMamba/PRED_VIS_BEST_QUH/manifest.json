@@ -1,0 +1,46 @@
+{
+  "baseline_root": "RUNS_QUH_100_30_WEIGHTED_ACCUM_GROUP2/MambaHSI_competitive_diff_alpha0p5",
+  "device": "cuda",
+  "selection_rule": "highest test OA among finished runs in baseline_root",
+  "exports": [
+    {
+      "dataset": "QUH-Pingan",
+      "selected_run": "run8_seed8",
+      "test_oa": 0.9606848496494936,
+      "checkpoint": "RUNS_QUH_100_30_WEIGHTED_ACCUM_GROUP2/MambaHSI_competitive_diff_alpha0p5/QUH-Pingan/run8_seed8/best_tr100_val30.pth",
+      "result": "RUNS_QUH_100_30_WEIGHTED_ACCUM_GROUP2/MambaHSI_competitive_diff_alpha0p5/QUH-Pingan/run8_seed8/result_tr100_val30.txt",
+      "pred_full": "PRED_VIS_BEST_QUH/QUH-Pingan/run8_seed8/pred_full.png",
+      "pred_mask": "PRED_VIS_BEST_QUH/QUH-Pingan/run8_seed8/pred_mask.png",
+      "gt": "PRED_VIS_BEST_QUH/QUH-Pingan/run8_seed8/gt.png",
+      "pred_label_zero_based": "PRED_VIS_BEST_QUH/QUH-Pingan/run8_seed8/pred_label_zero_based.npy",
+      "tile_size": 512,
+      "tile_overlap": 32
+    },
+    {
+      "dataset": "QUH-Qingyun",
+      "selected_run": "run4_seed4",
+      "test_oa": 0.9202169973577553,
+      "checkpoint": "RUNS_QUH_100_30_WEIGHTED_ACCUM_GROUP2/MambaHSI_competitive_diff_alpha0p5/QUH-Qingyun/run4_seed4/best_tr100_val30.pth",
+      "result": "RUNS_QUH_100_30_WEIGHTED_ACCUM_GROUP2/MambaHSI_competitive_diff_alpha0p5/QUH-Qingyun/run4_seed4/result_tr100_val30.txt",
+      "pred_full": "PRED_VIS_BEST_QUH/QUH-Qingyun/run4_seed4/pred_full.png",
+      "pred_mask": "PRED_VIS_BEST_QUH/QUH-Qingyun/run4_seed4/pred_mask.png",
+      "gt": "PRED_VIS_BEST_QUH/QUH-Qingyun/run4_seed4/gt.png",
+      "pred_label_zero_based": "PRED_VIS_BEST_QUH/QUH-Qingyun/run4_seed4/pred_label_zero_based.npy",
+      "tile_size": 512,
+      "tile_overlap": 32
+    },
+    {
+      "dataset": "QUH-Tangdaowan",
+      "selected_run": "run5_seed5",
+      "test_oa": 0.9675979143319412,
+      "checkpoint": "RUNS_QUH_100_30_WEIGHTED_ACCUM_GROUP2/MambaHSI_competitive_diff_alpha0p5/QUH-Tangdaowan/run5_seed5/best_tr100_val30.pth",
+      "result": "RUNS_QUH_100_30_WEIGHTED_ACCUM_GROUP2/MambaHSI_competitive_diff_alpha0p5/QUH-Tangdaowan/run5_seed5/result_tr100_val30.txt",
+      "pred_full": "PRED_VIS_BEST_QUH/QUH-Tangdaowan/run5_seed5/pred_full.png",
+      "pred_mask": "PRED_VIS_BEST_QUH/QUH-Tangdaowan/run5_seed5/pred_mask.png",
+      "gt": "PRED_VIS_BEST_QUH/QUH-Tangdaowan/run5_seed5/gt.png",
+      "pred_label_zero_based": "PRED_VIS_BEST_QUH/QUH-Tangdaowan/run5_seed5/pred_label_zero_based.npy",
+      "tile_size": 512,
+      "tile_overlap": 32
+    }
+  ]
+}
