@@ -24,6 +24,7 @@ import utils.data_load_operate as data_load_operate
 from utils.HSICommonUtils import ImageStretching
 from utils.Loss import resize
 from utils.visual_predict import visualize_predict
+from utils.checkpoint_selection import checkpoint_rank
 
 
 DATASETS = {
@@ -81,6 +82,16 @@ def parse_args():
     parser.add_argument("--tile_overlap", type=int, default=32)
     parser.add_argument("--pca_components", type=int, default=30)
     parser.add_argument("--gaussian_sigma", type=float, default=1.0)
+    parser.add_argument(
+        "--gaussian_spectral_sigma",
+        type=float,
+        default=None,
+        help=(
+            "Gaussian sigma for the spectral axis. The default reuses "
+            "--gaussian_sigma for legacy checkpoints."
+        ),
+    )
+    parser.add_argument("--spectral_fusion_scale", type=float, default=1.0)
     parser.add_argument("--stretch_low", type=float, default=2.0)
     parser.add_argument("--stretch_high", type=float, default=98.0)
     parser.add_argument(
@@ -92,7 +103,14 @@ def parse_args():
             "'auto' uses the checkpoint metric recorded by train.py."
         ),
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.gaussian_sigma < 0:
+        parser.error("--gaussian_sigma must be non-negative")
+    if args.gaussian_spectral_sigma is not None and args.gaussian_spectral_sigma < 0:
+        parser.error("--gaussian_spectral_sigma must be non-negative")
+    if not 0.0 < args.spectral_fusion_scale <= 1.0:
+        parser.error("--spectral_fusion_scale must be within (0, 1]")
+    return args
 
 
 def read_test_oa(result_path, expected_exp_idx, expected_seed):
@@ -145,6 +163,8 @@ def parse_evaluation_line(line):
         value = value.strip()
         if key == "checkpoint_metric":
             row["checkpoint_metric"] = value.lower()
+        elif key == "checkpoint_tie_break":
+            row["checkpoint_tie_break"] = value.lower()
         elif key in key_map:
             row[key_map[key]] = float(value)
     return row
@@ -197,6 +217,23 @@ def parse_validation_checkpoints(log_path):
                 "Unsupported checkpoint metric '{}' in {}".format(checkpoint_metric, log_path)
             )
 
+        explicit_tie_breaks = {
+            item["checkpoint_tie_break"]
+            for item in evaluation_rows
+            if "checkpoint_tie_break" in item
+        }
+        if len(explicit_tie_breaks) > 1:
+            raise ValueError(
+                "Run {} contains multiple checkpoint tie-break rules: {}".format(
+                    run_name,
+                    sorted(explicit_tie_breaks),
+                )
+            )
+        checkpoint_tie_break = next(iter(explicit_tie_breaks), "latest")
+        checkpoint_tie_break_source = (
+            "logged" if explicit_tie_breaks else "legacy_assumed_latest"
+        )
+
         scored_rows = []
         for item in evaluation_rows:
             score = item.get("checkpoint_score", item.get(checkpoint_metric))
@@ -208,13 +245,40 @@ def parse_validation_checkpoints(log_path):
                         log_path,
                     )
                 )
-            scored_rows.append((score, item["epoch"], item))
+            if checkpoint_tie_break == "latest":
+                rank = (score, item["epoch"])
+            elif checkpoint_tie_break == "earliest":
+                rank = (score, -item["epoch"])
+            else:
+                metrics = {
+                    metric: item[metric]
+                    for metric in VALIDATION_METRICS
+                    if metric in item
+                }
+                if len(metrics) != len(VALIDATION_METRICS):
+                    raise ValueError(
+                        "Incomplete validation metrics for {} epoch {} in {}".format(
+                            run_name,
+                            item["epoch"],
+                            log_path,
+                        )
+                    )
+                rank = checkpoint_rank(
+                    metrics,
+                    checkpoint_metric,
+                    checkpoint_tie_break,
+                    item["epoch"],
+                )
+            scored_rows.append((
+                rank,
+                score,
+                item["epoch"],
+                item,
+            ))
 
-        # train.py saves on >=, so the checkpoint on disk corresponds to the
-        # last epoch tied for the highest validation checkpoint score.
-        checkpoint_score, checkpoint_epoch, checkpoint_row = max(
+        _, checkpoint_score, checkpoint_epoch, checkpoint_row = max(
             scored_rows,
-            key=lambda item: (item[0], item[1]),
+            key=lambda item: item[0],
         )
         completed_runs[run_name] = {
             "run_name": run_name,
@@ -222,6 +286,8 @@ def parse_validation_checkpoints(log_path):
             "seed": seed,
             "checkpoint_metric": checkpoint_metric,
             "checkpoint_metric_source": checkpoint_metric_source,
+            "checkpoint_tie_break": checkpoint_tie_break,
+            "checkpoint_tie_break_source": checkpoint_tie_break_source,
             "checkpoint_score": checkpoint_score,
             "checkpoint_epoch": checkpoint_epoch,
             "validation_metrics": {
@@ -354,7 +420,15 @@ def export_dataset(args, dataset_name, device):
     checkpoint_path = selected["checkpoint_path"]
 
     data, gt = data_load_operate.load_data(dataset_name, args.data_set_path)
-    data_filtered = gaussian_filter(data, sigma=args.gaussian_sigma)
+    gaussian_spectral_sigma = (
+        args.gaussian_sigma
+        if args.gaussian_spectral_sigma is None
+        else args.gaussian_spectral_sigma
+    )
+    data_filtered = gaussian_filter(
+        data,
+        sigma=(args.gaussian_sigma, args.gaussian_sigma, gaussian_spectral_sigma),
+    )
     data_reshaped = data_filtered.reshape(-1, data_filtered.shape[2])
     data_pca = PCA(n_components=args.pca_components).fit_transform(data_reshaped)
     data_pca = data_pca.reshape(data_filtered.shape[0], data_filtered.shape[1], -1)
@@ -365,10 +439,12 @@ def export_dataset(args, dataset_name, device):
     x = transforms.ToTensor()(np.asarray(img, dtype=np.float32)).unsqueeze(0).float()
     tile_slices = generate_tile_slices(height, width, args.tile_size, args.tile_overlap)
 
+    model_kwargs = dict(MODEL_KWARGS)
+    model_kwargs["spectral_fusion_scale"] = args.spectral_fusion_scale
     model = MambaHSI(
         in_channels=channels,
         num_classes=class_count,
-        **MODEL_KWARGS,
+        **model_kwargs,
     ).to(device)
     state_dict = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(state_dict)
@@ -395,6 +471,8 @@ def export_dataset(args, dataset_name, device):
         "validation_score": selected["validation_score"],
         "checkpoint_metric": selected["checkpoint_metric"],
         "checkpoint_metric_source": selected["checkpoint_metric_source"],
+        "checkpoint_tie_break": selected["checkpoint_tie_break"],
+        "checkpoint_tie_break_source": selected["checkpoint_tie_break_source"],
         "checkpoint_score": selected["checkpoint_score"],
         "checkpoint_epoch": selected["checkpoint_epoch"],
         "validation_metrics_at_checkpoint": selected["validation_metrics"],
@@ -410,6 +488,9 @@ def export_dataset(args, dataset_name, device):
         "pred_label_zero_based": str(npy_path),
         "tile_size": args.tile_size,
         "tile_overlap": args.tile_overlap,
+        "gaussian_spatial_sigma": args.gaussian_sigma,
+        "gaussian_spectral_sigma": gaussian_spectral_sigma,
+        "spectral_fusion_scale": args.spectral_fusion_scale,
     }
 
 

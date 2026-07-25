@@ -423,7 +423,8 @@ class CompetitiveFusion(nn.Module):
 class ImprovedBothMamba(nn.Module):
     def __init__(self, channels, token_num, use_residual, group_num=4, pyramid_dilation=2,
                  ablation='full', outer_residual_mode='standard', outer_residual_alpha=1.0,
-                 spectral_diff_alpha=1.0, prca_num_scales=3, prca_num_layers=2,
+                 spectral_diff_alpha=1.0, spectral_fusion_scale=1.0,
+                 prca_num_scales=3, prca_num_layers=2,
                  prca_num_heads=4, lsp_reduction=4, spa_mamba_d_state=16,
                  spa_mamba_d_conv=4, spa_mamba_expand=2, spe_mamba_d_state=16,
                  spe_mamba_d_conv=4, spe_mamba_expand=2):
@@ -431,6 +432,9 @@ class ImprovedBothMamba(nn.Module):
         self.ablation = _validate_ablation(ablation)
         self.outer_residual_mode = _validate_outer_residual_mode(outer_residual_mode)
         self.outer_residual_alpha = float(outer_residual_alpha)
+        self.spectral_fusion_scale = float(spectral_fusion_scale)
+        if not 0.0 < self.spectral_fusion_scale <= 1.0:
+            raise ValueError('spectral_fusion_scale must be within (0, 1].')
         self.use_residual = use_residual
         self.use_spatial_branch = self.ablation not in SPATIAL_BRANCH_DISABLED_ABLATIONS
         self.use_spectral_branch = self.ablation not in SPECTRAL_BRANCH_DISABLED_ABLATIONS
@@ -500,6 +504,8 @@ class ImprovedBothMamba(nn.Module):
             fusion_x = 0.5 * (spa_x + spe_x)
         else:
             fusion_x = self.fusion(spa_x, spe_x)
+        if self.spectral_fusion_scale != 1.0:
+            fusion_x = spa_x + self.spectral_fusion_scale * (fusion_x - spa_x)
         return self._apply_outer_residual(x, fusion_x)
 
 
@@ -507,7 +513,8 @@ class ImprovedMambaHSI(nn.Module):
     def __init__(self, in_channels=128, hidden_dim=64, num_classes=10, use_residual=True,
                  token_num=4, group_num=4, pyramid_dilation=(2, 3), ablation='full',
                  outer_residual_mode='standard', outer_residual_alpha=1.0,
-                 spectral_diff_alpha=1.0, pool_size=2, cls_head_dim=128,
+                 spectral_diff_alpha=1.0, spectral_fusion_scale=1.0,
+                 pool_size=2, cls_head_dim=128,
                  prca_num_scales=3, prca_num_layers=2, prca_num_heads=4,
                  lsp_reduction=4, spa_mamba_d_state=16, spa_mamba_d_conv=4,
                  spa_mamba_expand=2, spe_mamba_d_state=16, spe_mamba_d_conv=4,
@@ -549,6 +556,7 @@ class ImprovedMambaHSI(nn.Module):
             outer_residual_mode=outer_residual_mode,
             outer_residual_alpha=outer_residual_alpha,
             spectral_diff_alpha=spectral_diff_alpha,
+            spectral_fusion_scale=spectral_fusion_scale,
             prca_num_scales=prca_num_scales,
             prca_num_layers=prca_num_layers,
             prca_num_heads=prca_num_heads,

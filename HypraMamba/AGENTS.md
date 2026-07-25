@@ -29,12 +29,12 @@ The strongest and most stable QUH configuration is currently:
 - Model output folder: `MambaHSI_competitive_diff_alpha0p5`
 - Protocol: QUH `100 train / 30 val / rest test` with fixed splits under `splits/quh_100_30_seed0-9`
 - Datasets: `dataset_index=10` for `QUH-Pingan`, `11` for `QUH-Qingyun`, and `12` for `QUH-Tangdaowan`
-- Preprocessing: `Gaussian sigma=1.0 -> PCA 30 -> ImageStretching(2,98)`, without PCA whitening
+- Preprocessing: spatial/spectral `Gaussian sigma=1.0 -> PCA 30 -> ImageStretching(2,98)`, without PCA whitening
 - Tile training: `tile_size=512`, `tile_overlap=32`, `tile_update_groups=2`
 - Optimizer: `Adam`, `lr=0.0003`, `weight_decay=1e-5`, `scheduler=none`, `max_epoch=200`
 - Loss: `CrossEntropyLoss`, `label_smoothing=0.05`, `class_weight_mode=balanced`
 - Model knobs: `hidden_dim=128`, `token_num=4`, `group_num=4`, `pool_size=2`, `high_res_skip=none`, `prca_num_scales=3`, `prca_num_layers=2`, `prca_num_heads=4`, `pyramid_dilation=3`, `spectral_diff_alpha=0.5`
-- Checkpoint selection: validation OA unless an experiment explicitly changes `--checkpoint_metric`
+- Checkpoint selection: validation OA unless an experiment explicitly changes `--checkpoint_metric`; new runs use `--checkpoint_tie_break secondary`, so equal OA is resolved by validation mIoU and then the earlier epoch
 
 The verified 10-seed means for this baseline are:
 
@@ -62,6 +62,7 @@ CUDA_VISIBLE_DEVICES=<gpu> nohup python -u train.py \
   --weight_decay 1e-5 \
   --label_smoothing 0.05 \
   --class_weight_mode balanced \
+  --checkpoint_tie_break secondary \
   > logs/<name>.log 2>&1 &
 ```
 
@@ -82,6 +83,7 @@ The network uses:
    - `PyramidAttention` computes QKV with `1x1 Conv` plus depthwise dilated `3x3` convolution. In training the CLI default is `--pyramid_dilation 3`, so the active default is a single dilation value `3`; the class default `(2, 3)` only applies when `ImprovedMambaHSI` is instantiated without the training script argument.
    - Spectral branch: first-order spectral-difference enhancement, optional zero padding to `token_num * ceil(C / token_num)`, reshape to `[B*H*W, token_num, ceil(C/token_num)]`, then Mamba over each pixel's short spectral token sequence.
 3. `CompetitiveFusion`: per-channel global softmax competition between spatial and spectral branch logits from `AdaptiveAvgPool2d(1) + Linear(C, C)`. If `wo_competitive` is selected, fusion falls back to `0.5 * (spa + spe)`.
+   - `spectral_fusion_scale=1.0` preserves the historical fusion exactly. Values below `1.0` keep both branches and the competitive gate, but interpolate the fused feature toward the spatial branch.
 4. Residuals are currently stacked: `LightSpatialPrior` has an internal residual; spatial and spectral branches keep their inner residuals when `use_residual=True`; `ImprovedBothMamba` also applies the outer residual according to `outer_residual_mode` (`standard`, `no_outer`, or `scaled`).
 5. `AvgPool2d(2)` after the dual-branch block, then the classification head: `1x1 Conv(hidden_dim -> 128) + GroupNorm + SiLU + 1x1 Conv(128 -> num_classes)`.
 
@@ -98,6 +100,33 @@ Supported ablations in `model/MambaHSI.py` are:
 - `SpeMamba` treats each spatial location as one spectral token sequence and restores the tensor back to `[B, C, H, W]` after Mamba.
 - `GroupNorm` group counts and `PyramidAttention` head counts are not auto-resolved in the current source. Keep `hidden_dim`, active `channels`, and padded spectral channel counts divisible by `group_num`, and keep PRCA channel width divisible by `num_heads=4`.
 - The default training configuration (`hidden_dim=128`, `token_num=4`, `group_num=4`, `num_heads=4`) satisfies those divisibility assumptions. Non-divisible experimental settings can still fail at `GroupNorm` or `einops.rearrange`.
+- `GradScaler` is initialized independently for every seed. Do not move it back to module scope, because scaler state must not leak across seed runs.
+
+## Validation-Only Tuning
+Hyperparameter search must not evaluate the test set. Use `--evaluate_test false`; this writes `validation_result_tr100_val30.txt` per seed and `mean_validation_result.txt` per dataset, and deliberately does not write `result_tr100_val30.txt` or `mean_result.txt`.
+
+For equal primary validation scores, use `--checkpoint_tie_break secondary`:
+
+- Qingyun: `checkpoint_metric=oa`, then validation mIoU, then the earlier epoch.
+- Tangdaowan: `checkpoint_metric=miou`, then validation OA, then the earlier epoch.
+
+The first evidence-backed tuning screen keeps the dual-branch architecture and competitive fusion, and tests only `spectral_fusion_scale=1.0,0.75,0.5,0.25`. Generate the detached validation-only workflow with:
+
+```bash
+python tools/generate_quh_fusion_screen_commands.py \
+  --gpus 3,4,5 \
+  --seeds 0,1,2,3,4 \
+  --output tools/run_quh_fusion_screen.sh
+```
+
+After it finishes, summarize validation metrics only with:
+
+```bash
+python tools/summarize_quh_validation_screen.py \
+  --output RUNS_QUH_VALSCREEN_fusion_summary.csv
+```
+
+The fixed QUH training split contains exactly 100 samples per class, so `class_weight_mode=balanced` produces all-one base weights and is mathematically equivalent to `none`; only explicit `class_weight_multipliers` change the loss. The validation split also contains exactly 30 samples per class, so validation OA and AA are equivalent and Kappa is monotonic with OA. Tune only OA versus mIoU checkpoint selection.
 
 ## Training, Testing, and Review
 Default QUH training follows the `RUNS_QUH_100_30_WEIGHTED_ACCUM_GROUP2` configuration above. For older non-QUH datasets, check the CLI defaults and the intended protocol before launching; do not assume QUH `100/30` or legacy `30/10` applies universally. The loss is cross-entropy. `indian` can use balanced class weights when `--class_weight_mode auto` or `balanced` is selected. The best checkpoint is selected by validation OA by default, then tested and written to `result_*.txt` and `mean_result.txt`.

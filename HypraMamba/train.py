@@ -9,6 +9,10 @@ from utils.Loss import head_loss, resize
 from utils.evaluation import Evaluator
 from utils.HSICommonUtils import ImageStretching
 from utils.setup_logger import setup_logger
+from utils.checkpoint_selection import (
+    VALID_CHECKPOINT_TIE_BREAKS,
+    should_replace_checkpoint,
+)
 from model.MambaHSI import (
     ImprovedMambaHSI as MambaHSI,
     VALID_ABLATIONS,
@@ -25,7 +29,6 @@ from torch.cuda.amp import autocast, GradScaler
 from torchvision import transforms
 
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:64,garbage_collection_threshold:0.6'
-scaler = GradScaler(enabled=torch.cuda.is_available())
 FUSION_NAME = 'competitive'
 QUH_DATASETS = {'QUH-Pingan', 'QUH-Qingyun', 'QUH-Tangdaowan'}
 
@@ -180,6 +183,10 @@ def validate_args(args, parser):
         parser.error('--cosine_eta_min must be non-negative.')
     if args.gaussian_sigma < 0:
         parser.error('--gaussian_sigma must be non-negative.')
+    if args.gaussian_spectral_sigma is not None and args.gaussian_spectral_sigma < 0:
+        parser.error('--gaussian_spectral_sigma must be non-negative.')
+    if not 0.0 < args.spectral_fusion_scale <= 1.0:
+        parser.error('--spectral_fusion_scale must be within (0, 1].')
     if args.stretch_low < 0 or args.stretch_high > 100:
         parser.error('--stretch_low and --stretch_high must be within [0, 100].')
     if args.hidden_dim % args.group_num != 0:
@@ -235,8 +242,33 @@ def get_parser():
         choices=['oa', 'aa', 'miou', 'kappa'],
         help='Validation metric used to select the best checkpoint.'
     )
+    parser.add_argument(
+        '--checkpoint_tie_break',
+        type=str,
+        default='secondary',
+        choices=sorted(VALID_CHECKPOINT_TIE_BREAKS),
+        help=(
+            "How to resolve equal primary validation scores. 'secondary' uses "
+            'the remaining validation metrics and then keeps the earlier epoch.'
+        )
+    )
+    parser.add_argument(
+        '--evaluate_test',
+        type=str2bool,
+        default=True,
+        help='Set false during hyperparameter screening to avoid evaluating the test set.'
+    )
     parser.add_argument('--pca_components', type=int, default=30)
     parser.add_argument('--gaussian_sigma', type=float, default=1.0)
+    parser.add_argument(
+        '--gaussian_spectral_sigma',
+        type=float,
+        default=None,
+        help=(
+            'Gaussian sigma for the spectral axis. The default reuses '
+            '--gaussian_sigma for backward compatibility.'
+        )
+    )
     parser.add_argument('--stretch_low', type=float, default=2.0)
     parser.add_argument('--stretch_high', type=float, default=98.0)
     parser.add_argument('--hidden_dim', type=int, default=128)
@@ -261,6 +293,7 @@ def get_parser():
     parser.add_argument('--outer_residual_mode', type=str, default='standard', choices=sorted(VALID_OUTER_RESIDUAL_MODES))
     parser.add_argument('--outer_residual_alpha', type=float, default=1.0)
     parser.add_argument('--spectral_diff_alpha', type=float, default=0.5)
+    parser.add_argument('--spectral_fusion_scale', type=float, default=1.0)
     parser.add_argument('--tile_size', type=int, default=512)
     parser.add_argument('--tile_overlap', type=int, default=32)
     parser.add_argument('--tile_update_groups', type=int, default=2)
@@ -297,6 +330,11 @@ else:
 save_net_base = base_save_net_name if outer_residual_tag == '' else '{}_{}'.format(base_save_net_name, outer_residual_tag)
 if args.spectral_diff_alpha != 1.0:
     save_net_base = '{}_diff_alpha{}'.format(save_net_base, format_float_for_name(args.spectral_diff_alpha))
+if args.spectral_fusion_scale != 1.0:
+    save_net_base = '{}_spe_scale{}'.format(
+        save_net_base,
+        format_float_for_name(args.spectral_fusion_scale),
+    )
 save_net_name = save_net_base if args.ablation == 'full' else '{}_{}'.format(save_net_base, args.ablation)
 data_set_name_list = [
     'UP',
@@ -349,8 +387,15 @@ paras_dict = {
     'class_weight_mode': class_weight_mode,
     'class_weight_multipliers': format_class_weight_multipliers(args.class_weight_multipliers),
     'checkpoint_metric': args.checkpoint_metric,
+    'checkpoint_tie_break': args.checkpoint_tie_break,
+    'evaluate_test': args.evaluate_test,
     'pca_components': args.pca_components,
     'gaussian_sigma': args.gaussian_sigma,
+    'gaussian_spectral_sigma': (
+        args.gaussian_sigma
+        if args.gaussian_spectral_sigma is None
+        else args.gaussian_spectral_sigma
+    ),
     'stretch_low': args.stretch_low,
     'stretch_high': args.stretch_high,
     'hidden_dim': args.hidden_dim,
@@ -374,6 +419,7 @@ paras_dict = {
     'outer_residual_mode': args.outer_residual_mode,
     'outer_residual_alpha': args.outer_residual_alpha,
     'spectral_diff_alpha': args.spectral_diff_alpha,
+    'spectral_fusion_scale': args.spectral_fusion_scale,
     'tile_size': tile_size,
     'tile_overlap': tile_overlap,
     'tile_update_groups': args.tile_update_groups,
@@ -390,6 +436,7 @@ model_kwargs = {
     'outer_residual_mode': args.outer_residual_mode,
     'outer_residual_alpha': args.outer_residual_alpha,
     'spectral_diff_alpha': args.spectral_diff_alpha,
+    'spectral_fusion_scale': args.spectral_fusion_scale,
     'pool_size': args.pool_size,
     'high_res_skip': args.high_res_skip,
     'cls_head_dim': args.cls_head_dim,
@@ -497,7 +544,8 @@ def train_one_epoch_tiled(
         tile_slices,
         loss_func,
         optimizer,
-        tile_update_groups):
+        tile_update_groups,
+        grad_scaler):
     train_tiles = []
     for tile_slice in tile_slices:
         valid_pixels = count_labeled_pixels_in_tile(train_label_cpu, tile_slice)
@@ -535,15 +583,15 @@ def train_one_epoch_tiled(
                 group_loss_weight = valid_pixels / group_valid_pixels
                 weighted_loss = loss * group_loss_weight
 
-            scaler.scale(weighted_loss).backward()
+            grad_scaler.scale(weighted_loss).backward()
 
             total_loss += float(loss.detach().cpu()) * (valid_pixels / total_valid_pixels)
             used_tiles += 1
 
             del input_tile, label_tile, loss, weighted_loss
 
-        scaler.step(optimizer)
-        scaler.update()
+        grad_scaler.step(optimizer)
+        grad_scaler.update()
         used_groups += 1
 
     return total_loss, used_tiles, used_groups
@@ -626,7 +674,23 @@ if __name__ == '__main__':
     if args.pca_components > data.shape[2]:
         raise ValueError('--pca_components must be <= input channel count {}.'.format(data.shape[2]))
 
-    data_filtered = gaussian_filter(data, sigma=args.gaussian_sigma)
+    gaussian_spectral_sigma = (
+        args.gaussian_sigma
+        if args.gaussian_spectral_sigma is None
+        else args.gaussian_spectral_sigma
+    )
+    gaussian_sigmas = (
+        args.gaussian_sigma,
+        args.gaussian_sigma,
+        gaussian_spectral_sigma,
+    )
+    logger.info(
+        'Gaussian filter sigmas: spatial={} spectral={}'.format(
+            args.gaussian_sigma,
+            gaussian_spectral_sigma,
+        )
+    )
+    data_filtered = gaussian_filter(data, sigma=gaussian_sigmas)
 
     logger.info('PCA enabled: pca_components={}'.format(args.pca_components))
     pca = PCA(n_components=args.pca_components)
@@ -646,6 +710,11 @@ if __name__ == '__main__':
     KPP_ALL = []
     MIOU_ALL = []
     EACH_ACC_ALL = []
+    VAL_OA_ALL = []
+    VAL_AA_ALL = []
+    VAL_KPP_ALL = []
+    VAL_MIOU_ALL = []
+    VAL_BEST_EPOCH_ALL = []
     Train_Time_ALL = []
     Test_Time_ALL = []
     total_params_m = None
@@ -655,6 +724,7 @@ if __name__ == '__main__':
 
     for exp_idx, curr_seed in enumerate(seed_list):
         setup_seed(curr_seed)
+        grad_scaler = GradScaler(enabled=device.type == 'cuda')
 
         single_experiment_name = 'run{}_seed{}'.format(str(exp_idx), str(curr_seed))
         save_single_experiment_folder = os.path.join(save_folder, single_experiment_name)
@@ -789,7 +859,8 @@ if __name__ == '__main__':
                 logger.info('FLOPs are tool estimates; verify Mamba custom ops support before reporting them.')
 
         tic1 = time.perf_counter()
-        best_val_score = -float('inf')
+        best_val_metrics = None
+        best_val_epoch = None
         for epoch in range(max_epoch):
             y_train = train_label.unsqueeze(0)
 
@@ -803,7 +874,8 @@ if __name__ == '__main__':
                     train_tile_slices,
                     loss_func,
                     optimizer,
-                    args.tile_update_groups
+                    args.tile_update_groups,
+                    grad_scaler,
                 )
                 logger.info(
                     'Iter:{}|cls_loss:{}|tiles:{}|tile_update_groups:{}'.format(
@@ -860,9 +932,9 @@ if __name__ == '__main__':
                             loss_func
                         )
                     optimizer.zero_grad()
-                    scaler.scale(loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
+                    grad_scaler.scale(loss).backward()
+                    grad_scaler.step(optimizer)
+                    grad_scaler.update()
                     torch.cuda.empty_cache()
                     logger.info(
                         'Iter:{}|cls_loss:{}'.format(
@@ -927,6 +999,12 @@ if __name__ == '__main__':
                 mIOU, IOU = evaluator.Mean_Intersection_over_Union()
                 mAcc, Acc = evaluator.Pixel_Accuracy_Class()
                 Kappa = evaluator.Kappa()
+                validation_metrics = {
+                    'oa': OA,
+                    'aa': mAcc,
+                    'miou': mIOU,
+                    'kappa': Kappa,
+                }
                 checkpoint_score = select_checkpoint_score(args.checkpoint_metric, OA, mAcc, mIOU, Kappa)
 
                 if need_val_vis:
@@ -939,20 +1017,37 @@ if __name__ == '__main__':
 
                 logger.info(get_fusion_status(net))
                 logger.info(
-                    'Evaluate {}|OA:{}|AA:{}|mIOU:{}|Kappa:{}|checkpoint_metric:{}|score:{}'.format(
+                    'Evaluate {}|OA:{}|AA:{}|mIOU:{}|Kappa:{}|checkpoint_metric:{}|'
+                    'checkpoint_tie_break:{}|score:{}'.format(
                         epoch,
                         OA,
                         mAcc,
                         mIOU,
                         Kappa,
                         args.checkpoint_metric,
+                        args.checkpoint_tie_break,
                         checkpoint_score
                     )
                 )
 
-                if checkpoint_score >= best_val_score:
-                    best_val_score = checkpoint_score
+                if should_replace_checkpoint(
+                        validation_metrics,
+                        best_val_metrics,
+                        args.checkpoint_metric,
+                        args.checkpoint_tie_break,
+                        epoch,
+                        best_val_epoch):
+                    best_val_metrics = validation_metrics.copy()
+                    best_val_epoch = epoch
                     torch.save(net.state_dict(), save_weight_path)
+                    logger.info(
+                        'Checkpoint saved|epoch:{}|metric:{}|score:{}|tie_break:{}'.format(
+                            epoch,
+                            args.checkpoint_metric,
+                            checkpoint_score,
+                            args.checkpoint_tie_break,
+                        )
+                    )
 
             if scheduler is not None:
                 scheduler.step()
@@ -961,6 +1056,41 @@ if __name__ == '__main__':
         toc1 = time.perf_counter()  # 记录结束时间
         train_time = toc1 - tic1  # 计算时间间隔
         logger.info(f"train_time: {train_time} seconds")
+
+        if best_val_metrics is None or best_val_epoch is None:
+            raise RuntimeError('No validation checkpoint was selected.')
+
+        VAL_OA_ALL.append(best_val_metrics['oa'])
+        VAL_AA_ALL.append(best_val_metrics['aa'])
+        VAL_KPP_ALL.append(best_val_metrics['kappa'])
+        VAL_MIOU_ALL.append(best_val_metrics['miou'])
+        VAL_BEST_EPOCH_ALL.append(best_val_epoch)
+
+        if not args.evaluate_test:
+            validation_results_save_path = os.path.join(
+                save_single_experiment_folder,
+                'validation_result_tr{}_val{}.txt'.format(num_list[0], num_list[1])
+            )
+            validation_results = '\n======================' \
+                                 + ' exp_idx=' + str(exp_idx) \
+                                 + ' seed=' + str(curr_seed) \
+                                 + ' validation_only=true' \
+                                 + ' ======================' \
+                                 + '\ncheckpoint_metric=' + args.checkpoint_metric \
+                                 + '\ncheckpoint_tie_break=' + args.checkpoint_tie_break \
+                                 + '\nbest_epoch=' + str(best_val_epoch) \
+                                 + '\nval_OA=' + str(best_val_metrics['oa']) \
+                                 + '\nval_AA=' + str(best_val_metrics['aa']) \
+                                 + '\nval_kpp=' + str(best_val_metrics['kappa']) \
+                                 + '\nval_mIOU=' + str(best_val_metrics['miou']) \
+                                 + '\ntest_evaluated=false' \
+                                 + '\nTrain time(s)=' + str(train_time) + '\n'
+            logger.info(validation_results)
+            with open(validation_results_save_path, 'w') as f:
+                f.write(validation_results)
+            Train_Time_ALL.append(train_time)
+            torch.cuda.empty_cache()
+            continue
 
         logger.info("\n\n====================Starting evaluation for testing set.========================\n")
         tic2 = time.perf_counter()
@@ -1033,13 +1163,70 @@ if __name__ == '__main__':
 
         torch.cuda.empty_cache()
 
-    OA_ALL = np.array(OA_ALL)
+    VAL_OA_ALL = np.array(VAL_OA_ALL)
+    VAL_AA_ALL = np.array(VAL_AA_ALL)
+    VAL_KPP_ALL = np.array(VAL_KPP_ALL)
+    VAL_MIOU_ALL = np.array(VAL_MIOU_ALL)
+    VAL_BEST_EPOCH_ALL = np.array(VAL_BEST_EPOCH_ALL)
     AA_ALL = np.array(AA_ALL)
+    OA_ALL = np.array(OA_ALL)
     KPP_ALL = np.array(KPP_ALL)
     MIOU_ALL = np.array(MIOU_ALL)
     EACH_ACC_ALL = np.array(EACH_ACC_ALL)
     Train_Time_ALL = np.array(Train_Time_ALL)
     Test_Time_ALL = np.array(Test_Time_ALL)
+
+    if not args.evaluate_test:
+        logger.info(
+            "\n====================Validation-only mean result of {} runs "
+            "=========================".format(len(seed_list))
+        )
+        logger.info('Best validation OA: {}'.format(list(VAL_OA_ALL)))
+        logger.info('Best validation AA: {}'.format(list(VAL_AA_ALL)))
+        logger.info('Best validation KPP: {}'.format(list(VAL_KPP_ALL)))
+        logger.info('Best validation mIOU: {}'.format(list(VAL_MIOU_ALL)))
+        logger.info('Best validation epochs: {}'.format(list(VAL_BEST_EPOCH_ALL)))
+        logger.info('Validation OA: {:.2f} ± {:.2f}'.format(
+            np.mean(VAL_OA_ALL) * 100,
+            np.std(VAL_OA_ALL) * 100,
+        ))
+        logger.info('Validation mIOU: {:.2f} ± {:.2f}'.format(
+            np.mean(VAL_MIOU_ALL) * 100,
+            np.std(VAL_MIOU_ALL) * 100,
+        ))
+
+        mean_validation_result_path = os.path.join(save_folder, 'mean_validation_result.txt')
+        with open(mean_validation_result_path, 'w') as f:
+            validation_summary = '\n\n***************Validation-only mean result of ' \
+                                 + str(len(seed_list)) \
+                                 + ' runs ********************' \
+                                 + '\ntest_evaluated=false' \
+                                 + '\ncheckpoint_metric=' + args.checkpoint_metric \
+                                 + '\ncheckpoint_tie_break=' + args.checkpoint_tie_break \
+                                 + '\nList of best validation OA:' + str(list(VAL_OA_ALL)) \
+                                 + '\nList of best validation AA:' + str(list(VAL_AA_ALL)) \
+                                 + '\nList of best validation KPP:' + str(list(VAL_KPP_ALL)) \
+                                 + '\nList of best validation mIOU:' + str(list(VAL_MIOU_ALL)) \
+                                 + '\nList of best validation epochs:' + str(list(VAL_BEST_EPOCH_ALL)) \
+                                 + '\nValidation OA=' \
+                                 + str(round(np.mean(VAL_OA_ALL) * 100, 2)) \
+                                 + '+-' + str(round(np.std(VAL_OA_ALL) * 100, 2)) \
+                                 + '\nValidation AA=' \
+                                 + str(round(np.mean(VAL_AA_ALL) * 100, 2)) \
+                                 + '+-' + str(round(np.std(VAL_AA_ALL) * 100, 2)) \
+                                 + '\nValidation Kpp=' \
+                                 + str(round(np.mean(VAL_KPP_ALL) * 100, 2)) \
+                                 + '+-' + str(round(np.std(VAL_KPP_ALL) * 100, 2)) \
+                                 + '\nValidation mIOU=' \
+                                 + str(round(np.mean(VAL_MIOU_ALL) * 100, 2)) \
+                                 + '+-' + str(round(np.std(VAL_MIOU_ALL) * 100, 2)) \
+                                 + '\nAverage training time(s)=' \
+                                 + str(np.round(np.mean(Train_Time_ALL), decimals=2)) \
+                                 + '+-' + str(np.round(np.std(Train_Time_ALL), decimals=3))
+            f.write(validation_summary)
+        del net
+        torch.cuda.empty_cache()
+        raise SystemExit(0)
 
     np.set_printoptions(precision=4)
     logger.info("\n====================Mean result of {} times runs =========================".format(len(seed_list)))
