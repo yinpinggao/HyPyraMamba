@@ -31,6 +31,7 @@ from torchvision import transforms
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:64,garbage_collection_threshold:0.6'
 FUSION_NAME = 'competitive'
 QUH_DATASETS = {'QUH-Pingan', 'QUH-Qingyun', 'QUH-Tangdaowan'}
+TREE_SPECIES_DATASETS = {data_load_operate.TREE_SPECIES_DATASET}
 
 
 def vis_a_image(gt_vis, pred_vis, save_single_predict_path, save_single_gt_path, only_vis_label=False):
@@ -297,6 +298,17 @@ def get_parser():
     parser.add_argument('--tile_size', type=int, default=512)
     parser.add_argument('--tile_overlap', type=int, default=32)
     parser.add_argument('--tile_update_groups', type=int, default=2)
+    parser.add_argument(
+        '--tree_species_train_on',
+        type=str,
+        default='train',
+        choices=['train', 'train_val'],
+        help=(
+            'TreeSpeciesHSI only: which official masks to train on. '
+            'train_val uses train_label+val_label for fitting (recommended for Kaggle submit) '
+            'and holds out 10 percent of val pixels for checkpoint selection.'
+        ),
+    )
 
     args = parser.parse_args()
     validate_args(args, parser)
@@ -350,12 +362,15 @@ data_set_name_list = [
     'QUH-Pingan',
     'QUH-Qingyun',
     'QUH-Tangdaowan',
+    'TreeSpeciesHSI',
 ]
 data_set_name = data_set_name_list[dataset_index]
 split_image = data_set_name in ['HanChuan', 'Houston','Pavia']
 tile_size = args.tile_size
 if data_set_name in QUH_DATASETS and tile_size <= 0:
     tile_size = 256
+if data_set_name in TREE_SPECIES_DATASETS and tile_size <= 0:
+    tile_size = 512
 tile_overlap = args.tile_overlap if tile_size > 0 else 0
 use_tile_mode = tile_size > 0
 
@@ -670,6 +685,8 @@ if __name__ == '__main__':
     logger.info(get_fusion_status(model=None))
 
     data, gt = data_load_operate.load_data(data_set_name, data_set_path)
+    data = np.asarray(data, dtype=np.float32)
+    gt = np.asarray(gt)
 
     if args.pca_components > data.shape[2]:
         raise ValueError('--pca_components must be <= input channel count {}.'.format(data.shape[2]))
@@ -690,6 +707,7 @@ if __name__ == '__main__':
             gaussian_spectral_sigma,
         )
     )
+    logger.info('Loaded cube shape={} dtype={} label_shape={}'.format(data.shape, data.dtype, gt.shape))
     data_filtered = gaussian_filter(data, sigma=gaussian_sigmas)
 
     logger.info('PCA enabled: pca_components={}'.format(args.pca_components))
@@ -702,6 +720,34 @@ if __name__ == '__main__':
     gt_reshape = gt.reshape(-1)
     img = ImageStretching(data_pca, low=args.stretch_low, high=args.stretch_high)
     class_count = int(max(np.unique(gt)))
+
+    preprocess_path = os.path.join(save_folder, 'preprocess_tr{}_val{}.npz'.format(num_list[0], num_list[1]))
+    # Persist train-scene PCA so competition test cubes can reuse the same projection.
+    stretch_mins = []
+    stretch_maxs = []
+    for band_idx in range(data_pca.shape[2]):
+        band = data_pca[:, :, band_idx]
+        stretch_mins.append(np.percentile(band, args.stretch_low))
+        stretch_maxs.append(np.percentile(band, args.stretch_high))
+    np.savez(
+        preprocess_path,
+        pca_components=pca.components_.astype(np.float32),
+        pca_mean=pca.mean_.astype(np.float32),
+        explained_variance_=np.asarray(pca.explained_variance_, dtype=np.float32),
+        explained_variance_ratio_=np.asarray(pca.explained_variance_ratio_, dtype=np.float32),
+        stretch_mins=np.asarray(stretch_mins, dtype=np.float32),
+        stretch_maxs=np.asarray(stretch_maxs, dtype=np.float32),
+        gaussian_sigma=np.float32(args.gaussian_sigma),
+        gaussian_spectral_sigma=np.float32(gaussian_spectral_sigma),
+        stretch_low=np.float32(args.stretch_low),
+        stretch_high=np.float32(args.stretch_high),
+        pca_components_n=np.int32(args.pca_components),
+        class_count=np.int32(class_count),
+    )
+    import json
+    with open(os.path.join(save_folder, 'model_kwargs.json'), 'w') as f:
+        json.dump(model_kwargs, f, indent=2, sort_keys=True)
+    logger.info('Saved preprocessing artifacts to {}'.format(preprocess_path))
 
     ratio_list = [0.1, 0.01]  # [train_ratio, val_ratio]
 
@@ -740,7 +786,39 @@ if __name__ == '__main__':
         predict_save_path = os.path.join(save_single_experiment_folder, 'pred_vis_tr{}_val{}.png'.format(num_list[0], num_list[1]))
         gt_save_path = os.path.join(save_single_experiment_folder, 'gt_vis_tr{}_val{}.png'.format(num_list[0], num_list[1]))
 
-        if data_set_name in QUH_DATASETS:
+        if data_set_name in TREE_SPECIES_DATASETS:
+            train_data_index, val_data_index, test_data_index = data_load_operate.load_tree_species_official_split(
+                data_set_path
+            )
+            if args.tree_species_train_on == 'train_val':
+                # Fit on official train + most of val; keep a fixed 10% val holdout for checkpoints.
+                rng = np.random.RandomState(curr_seed)
+                val_perm = rng.permutation(val_data_index)
+                n_holdout = max(int(0.1 * len(val_perm)), 1)
+                val_holdout = val_perm[:n_holdout]
+                val_for_train = val_perm[n_holdout:]
+                train_data_index = np.concatenate(
+                    [np.asarray(train_data_index, dtype=np.int64), np.asarray(val_for_train, dtype=np.int64)]
+                )
+                val_data_index = np.asarray(val_holdout, dtype=np.int64)
+                test_data_index = val_data_index.copy()
+                logger.info(
+                    'TreeSpeciesHSI train_on=train_val: train={} (official train+90% val) '
+                    'val_holdout={} test(holdout)={}'.format(
+                        len(train_data_index),
+                        len(val_data_index),
+                        len(test_data_index),
+                    )
+                )
+            else:
+                logger.info(
+                    'Loaded official TreeSpeciesHSI split: train={} val={} test(val_reuse)={}'.format(
+                        len(train_data_index),
+                        len(val_data_index),
+                        len(test_data_index),
+                    )
+                )
+        elif data_set_name in QUH_DATASETS:
             train_data_index, val_data_index, test_data_index, split_path = data_load_operate.load_fixed_split(
                 args.split_dir,
                 data_set_name,

@@ -16,7 +16,8 @@ result_*.txt
 *.mat
 *.npz
 *.wmf
-
+*.npy
+*.csv
 # 忽略数据集目录
 data/
 datasets/
