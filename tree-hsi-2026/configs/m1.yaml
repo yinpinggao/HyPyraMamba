@@ -1,0 +1,28 @@
+model: m1
+model_name: hybridsn
+upstream_repository: https://github.com/Pancakerr/HybridSN
+upstream_commit: 01b3ba919d1b3d8d15b132ff3e804ea0488ca08f
+num_classes: 17
+bands: 30
+pca_whiten: true
+patch_size: 25
+seed: 0
+deterministic: true
+batch_size: 64
+num_workers: 4
+epochs: 200
+patience: 20
+optimizer: adam
+learning_rate: 0.001
+weight_decay: 0.000001
+loss: cross_entropy
+class_weight: sqrt_inverse_frequency
+focal_loss: false
+amp: true
+val_tile_size: 512
+train_augment: true
+data:
+  cache_cube: data/cache/train_pca30_float16.npy
+  train_label: ../HypraMamba/data/TreeSpeciesHSI/train_label.mat
+  val_label: ../HypraMamba/data/TreeSpeciesHSI/val_label.mat
+output_root: outputs/m1

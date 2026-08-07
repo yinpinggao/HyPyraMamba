@@ -1,0 +1,38 @@
+model: m5
+model_name: hypersigma_dense_dualview_max
+upstream_commit: 07e9ea24e3072fcb5c3a92a2bcb8185e43b295b9
+upstream_source: third_party/HyperSIGMA/ImageClassification/model/ss_fusion_seg.py
+training_mode: strict
+seed: 0
+tile_size: 128
+tile_overlap: 32
+batch_size: 4
+num_workers: 2
+samples_per_epoch: 1024
+epochs: 80
+patience: 10
+validate_every: 2
+monitor_tiles: 128
+train_augment: true
+amp_dtype: bfloat16
+weight_decay: 0.05
+label_smoothing: 0.05
+gradient_clip: 1.0
+class_weight: sqrt_inverse_frequency
+hypersigma:
+  spatial_patch_size: 8
+  spatial_checkpoint: outputs/m5_domain_adapt/spatial_mae.pt
+  spectral_checkpoint: outputs/m5_domain_adapt/spectral_mae.pt
+  head_lr: 0.00006
+  embedding_lr: 0.00003
+  backbone_lr: 0.000006
+  layer_decay: 0.9
+  head_warmup_epochs: 5
+  top4_until_epoch: 15
+  warmup_ratio: 0.05
+data:
+  spatial_cache: data/cache/train_hsmax_pca30_float16.npy
+  spectral_cache: data/cache/train_hsmax_native98_float16.npy
+  train_label: ../HypraMamba/data/TreeSpeciesHSI/train_label.mat
+  val_label: ../HypraMamba/data/TreeSpeciesHSI/val_label.mat
+output_root: outputs/m5_max_strict

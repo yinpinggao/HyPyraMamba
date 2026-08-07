@@ -1,0 +1,38 @@
+model: m3
+model_name: gaht
+author_model: proposed
+upstream_repository: https://github.com/MeiShaohui/Group-Aware-Hierarchical-Transformer
+upstream_commit: d9340ded8fca9cca650a0bbae3853ae499aa638d
+upstream_source: third_party/GAHT/models/proposed.py
+num_classes: 17
+bands: 30
+pca_whiten: true
+patch_size: 7
+gaht:
+  n_groups: [2, 2, 2]
+  depths: [1, 2, 1]
+  embed_dims: [256, 128, 64]
+  num_heads: [8, 4, 2]
+  mlp_ratios: [1, 1, 1]
+seed: 0
+deterministic: true
+batch_size: 64
+val_batch_size: 512
+num_workers: 4
+epochs: 300
+patience: 20
+optimizer: sgd
+learning_rate: 0.001
+momentum: 0.9
+weight_decay: 0.0001
+loss: cross_entropy
+class_weight: sqrt_inverse_frequency
+focal_loss: false
+amp: true
+val_tile_size: 512
+train_augment: true
+data:
+  cache_cube: data/cache/train_pca30_float16.npy
+  train_label: ../HypraMamba/data/TreeSpeciesHSI/train_label.mat
+  val_label: ../HypraMamba/data/TreeSpeciesHSI/val_label.mat
+output_root: outputs/m3

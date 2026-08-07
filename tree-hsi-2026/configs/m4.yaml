@@ -1,0 +1,48 @@
+model: m4
+model_name: mambahsi
+author_model: MambaHSI
+upstream_repository: https://github.com/li-yapeng/MambaHSI
+upstream_commit: a705284aef14e802bb1a09b2a5e73abaefc0b2d0
+upstream_source: third_party/MambaHSI/model/MambaHSI.py
+input_shape: "[1, 98, tile_height, tile_width]"
+input_mode: dense_tile
+num_classes: 17
+bands: 98
+pca_components: 0
+pca_whiten: false
+preprocessing: train-mask-only band standardization, no PCA
+tile_size: 512
+tile_overlap: 32
+native_output_stride: 4
+resize_logits_to_tile: true
+resize_mode: bilinear
+align_corners: true
+mambahsi:
+  hidden_dim: 128
+  mamba_type: both
+  token_num: 4
+  group_num: 4
+  use_residual: true
+  use_att: true
+seed: 0
+deterministic: true
+# The author's spatial branch combines B*H*W into one sequence.  Keep one tile
+# per process; parallelism should be across GPUs/seeds, not tile batch items.
+batch_size: 1
+num_workers: 0
+epochs: 200
+patience: 20
+optimizer: adam
+learning_rate: 0.0003
+weight_decay: 0.0
+loss: cross_entropy
+class_weight: sqrt_inverse_frequency
+focal_loss: false
+amp: true
+amp_dtype: bfloat16
+train_augment: true
+data:
+  cache_cube: data/cache/train_pca98_float16.npy
+  train_label: ../HypraMamba/data/TreeSpeciesHSI/train_label.mat
+  val_label: ../HypraMamba/data/TreeSpeciesHSI/val_label.mat
+output_root: outputs/m4

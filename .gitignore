@@ -7,6 +7,7 @@ __pycache__/
 
 # 忽略模型权重文件
 *.pth
+*.pt
 
 # 忽略可视化结果
 *.png
@@ -15,6 +16,7 @@ __pycache__/
 result_*.txt
 *.wmf
 *.tex
+*.npy
 
 # 忽略数据集目录
 data/
@@ -25,3 +27,13 @@ HypraMamba/splits/
 
 # 忽略本地训练输出
 HypraMamba/RUNS*/
+
+# 忽略第三方参考仓库（保留 SOURCES.md 记录来源）
+tree-hsi-2026/third_party/*
+!tree-hsi-2026/third_party/SOURCES.md
+
+# 忽略中止/失败的训练输出
+tree-hsi-2026/outputs/*_aborted*/
+
+# 忽略竞赛提交 CSV（单文件数百 MB，不入库）
+tree-hsi-2026/submissions/*.csv

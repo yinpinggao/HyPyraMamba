@@ -1,0 +1,48 @@
+model: m5
+model_name: hypersigma_vit_b
+upstream_repository: https://github.com/WHU-Sigma/HyperSIGMA
+upstream_commit: 07e9ea24e3072fcb5c3a92a2bcb8185e43b295b9
+upstream_source: third_party/HyperSIGMA/ImageClassification/model/ss_fusion_cls.py
+num_classes: 17
+bands: 30
+pca_whiten: true
+patch_size: 33
+hypersigma:
+  spatial_patch_size: 2
+  spatial_checkpoint: weights/hypersigma/spat-vit-base-ultra-checkpoint-1599.pth
+  spectral_checkpoint: weights/hypersigma/spec-vit-base-ultra-checkpoint-1599.pth
+  checkpoint_adaptation: official_classification_recipe_skip_patch_and_position_embeddings
+  interpolate_pos_encoding: true
+  gradient_checkpointing: true
+  finetune_mode: peft
+  warmup_head_epochs: 0
+  head_lr: 0.00006
+  patch_embedding_lr: 0.00003
+  norm_bias_lr: 0.00001
+  warmup_ratio: 0.05
+  validation_fraction: 0.05
+  full_validation_at_end: true
+seed: 0
+deterministic: false
+batch_size: 1
+val_batch_size: 32
+num_workers: 4
+epochs: 60
+patience: 10
+optimizer: adamw
+learning_rate: 0.00006
+weight_decay: 0.05
+loss: cross_entropy
+label_smoothing: 0.1
+gradient_clip: 1.0
+scheduler: cosine
+class_weight: null
+focal_loss: false
+amp: true
+val_tile_size: 128
+train_augment: true
+data:
+  cache_cube: data/cache/train_pca30_float16.npy
+  train_label: ../HypraMamba/data/TreeSpeciesHSI/train_label.mat
+  val_label: ../HypraMamba/data/TreeSpeciesHSI/val_label.mat
+output_root: outputs/m5_phase1_pca30_peft
