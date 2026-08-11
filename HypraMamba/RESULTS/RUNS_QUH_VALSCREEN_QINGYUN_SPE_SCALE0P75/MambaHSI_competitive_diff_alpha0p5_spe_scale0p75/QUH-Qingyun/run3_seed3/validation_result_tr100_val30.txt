@@ -1,0 +1,11 @@
+
+====================== exp_idx=3 seed=3 validation_only=true ======================
+checkpoint_metric=oa
+checkpoint_tie_break=secondary
+best_epoch=127
+val_OA=0.9444444444444444
+val_AA=0.9444444444444445
+val_kpp=0.9333333333333333
+val_mIOU=0.8965919273378952
+test_evaluated=false
+Train time(s)=1228.8229753659107

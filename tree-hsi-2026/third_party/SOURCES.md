@@ -11,6 +11,7 @@ formal model must be instantiated from the corresponding author repository;
 | M3 GAHT | <https://github.com/MeiShaohui/Group-Aware-Hierarchical-Transformer> | `d9340ded8fca9cca650a0bbae3853ae499aa638d` | `GAHT/models/` | README documents checkpoint paths, but no checkpoint files are present |
 | M4 MambaHSI | <https://github.com/li-yapeng/MambaHSI> | `a705284aef14e802bb1a09b2a5e73abaefc0b2d0` | `MambaHSI/model/MambaHSI.py` | no author checkpoint published in the repository |
 | M5 HyperSIGMA | <https://github.com/WHU-Sigma/HyperSIGMA> | `07e9ea24e3072fcb5c3a92a2bcb8185e43b295b9` | `HyperSIGMA/ImageClassification/` plus `Pretrain/` | official Spatial and Spectral ViT-B weights downloaded and verified |
+| BiDA | <https://github.com/YuxiangZhang-BIT/IEEE_TCSVT_BiDA> | `66a92b542ffa1df3c8b628af3d8bd001b799f1f6` | `IEEE_TCSVT_BiDA/` | no competition-compatible checkpoint published |
 
 Licenses are retained exactly where the upstream repository provides them.
 Absence of an explicit license will be recorded before redistribution or

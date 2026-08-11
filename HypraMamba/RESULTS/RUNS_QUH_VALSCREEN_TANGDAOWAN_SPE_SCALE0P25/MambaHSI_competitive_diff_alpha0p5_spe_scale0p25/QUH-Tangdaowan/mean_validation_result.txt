@@ -1,0 +1,16 @@
+
+
+***************Validation-only mean result of 5 runs ********************
+test_evaluated=false
+checkpoint_metric=miou
+checkpoint_tie_break=secondary
+List of best validation OA:[np.float64(0.9722222222222222), np.float64(0.987037037037037), np.float64(0.9814814814814815), np.float64(0.9777777777777777), np.float64(0.9814814814814815)]
+List of best validation AA:[np.float64(0.9722222222222222), np.float64(0.9870370370370369), np.float64(0.9814814814814815), np.float64(0.9777777777777779), np.float64(0.9814814814814815)]
+List of best validation KPP:[np.float64(0.9705882352941176), np.float64(0.9862745098039216), np.float64(0.9803921568627452), np.float64(0.9764705882352941), np.float64(0.9803921568627452)]
+List of best validation mIOU:[np.float64(0.9483846077260056), np.float64(0.9749898175301401), np.float64(0.9649695883566852), np.float64(0.9577556963645674), np.float64(0.9650025601638504)]
+List of best validation epochs:[np.int64(195), np.int64(196), np.int64(183), np.int64(169), np.int64(195)]
+Validation OA=98.0+-0.49
+Validation AA=98.0+-0.49
+Validation Kpp=97.88+-0.52
+Validation mIOU=96.22+-0.88
+Average training time(s)=1652.65+-1.77
