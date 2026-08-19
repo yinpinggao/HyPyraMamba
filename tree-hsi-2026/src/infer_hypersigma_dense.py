@@ -167,11 +167,19 @@ def main() -> None:
     model.load_state_dict(checkpoint["model"])
     model.to(device)
     views = tuple(item.strip() for item in args.tta.split(",") if item.strip())
+    inference_data = config.get("inference_data", {})
     for scene, shape in SCENES.items():
+        scene_data = inference_data.get(scene, {})
+        spatial_path = scene_data.get(
+            "spatial_cache", f"data/cache/{scene}_hsmax_pca30_float16.npy"
+        )
+        spectral_path = scene_data.get(
+            "spectral_cache", f"data/cache/{scene}_hsmax_native98_float16.npy"
+        )
         infer_scene(
             model,
-            resolve_path(f"data/cache/{scene}_hsmax_pca30_float16.npy"),
-            resolve_path(f"data/cache/{scene}_hsmax_native98_float16.npy"),
+            resolve_path(spatial_path),
+            resolve_path(spectral_path),
             args.output_dir.resolve() / f"probs_{scene}.npy",
             shape, int(config["tile_size"]), int(config["tile_overlap"]), views,
             rank, world, device,

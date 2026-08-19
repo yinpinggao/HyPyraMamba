@@ -17,3 +17,15 @@ m5_hypersigma_dense_max,0,complete,40,0.7760237061900953,0.6905261770312071,0.74
 m5_hypersigma_dense_max,0,complete,40,,,,194240126,1820.8161756359623,,train + all val; fixed-epoch final refit
 m5_hypersigma_dense_max,0,complete,40,0.79636015576855,0.6751261094798945,0.7688122198585958,194240126,5910.057608898031,,train + spatial 90% val -> spatial 10% val
 m5_hypersigma_dense_max,0,complete,40,,,,194240126,3961.668527700007,,train + all val; fixed-epoch final refit
+m5_hypersigma_dense_max,0,complete,40,0.6985004741583689,0.6242287564187816,0.6618694936219287,194240126,6797.89136796305,,component-isolated domain fold fold0.npz; validation=168720; buffered labels=223221
+m5_hypersigma_dense_max,0,complete,30,0.6696834992887625,0.6055040462245814,0.6296147863546697,194240126,2967.4586879339768,,component-isolated domain fold fold0.npz; validation=168720; buffered labels=223221
+m5_hypersigma_dense_max,0,complete,40,0.6998518255097202,0.6267768267503686,0.6635300667434141,194240126,4132.227791156969,,component-isolated domain fold fold0.npz; validation=168720; buffered labels=223221
+m5_hypersigma_dense_max,0,complete,30,0.7218134434189912,0.6201635726710739,0.68387272339618,194240126,4717.884899344994,,component-isolated domain fold fold1.npz; validation=134683; buffered labels=257457
+m5_hypersigma_dense_max,0,complete,50,0.6358043825556164,0.5338123195809791,0.5915485887514369,194240126,3409.7562676720554,,component-isolated domain fold fold2.npz; validation=125817; buffered labels=262633
+m5_hypersigma_dense_max,0,complete,40,0.6831018867924529,0.6268670827138945,0.6479709231982012,194240126,2730.703463247977,,component-isolated domain fold fold3.npz; validation=132500; buffered labels=287981
+m5_hypersigma_dense_max,0,complete,50,0.6093301009224763,0.4729170237259752,0.5599097316542962,194240126,3456.3402523290133,,component-isolated domain fold fold4.npz; validation=129109; buffered labels=280565
+m5_hypersigma_dense_max,0,complete,30,0.6696953532479848,0.607033399715024,0.629600231745707,194240126,4759.92684230092,,component-isolated domain fold fold0.npz; validation=168720; buffered labels=223221
+m5_hypersigma_dense_max,0,complete,30,0.7248130796017315,0.6526620311216951,0.6870094737496454,194240126,8757.905932211084,,component-isolated domain fold fold1.npz; validation=134683; buffered labels=257457
+m5_hypersigma_dense_max,0,complete,50,0.6652042251841961,0.5432048453036035,0.6246488749361692,194240126,7702.539210201008,,component-isolated domain fold fold2.npz; validation=125817; buffered labels=262633
+m5_hypersigma_dense_max,0,complete,40,0.669977358490566,0.5998328405741573,0.6327280590099829,194240126,8353.221784083056,,component-isolated domain fold fold3.npz; validation=132500; buffered labels=287981
+m5_hypersigma_dense_max,0,complete,30,0.6310172025188019,0.477915504022085,0.5843870051398286,194240126,3800.5783411349403,,component-isolated domain fold fold4.npz; validation=129109; buffered labels=280565

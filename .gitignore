@@ -17,6 +17,7 @@ result_*.txt
 *.wmf
 *.tex
 *.npy
+*.npz
 
 # 忽略数据集目录
 data/
@@ -37,3 +38,10 @@ tree-hsi-2026/outputs/*_aborted*/
 
 # 忽略竞赛提交 CSV（单文件数百 MB，不入库）
 tree-hsi-2026/submissions/*.csv
+
+# 忽略根目录打包产物（代码评审包、提交压缩包）
+/*.zip
+HypraMamba_model_code_review_20260818/
+
+# 忽略 TensorBoard 事件文件（体积大，非 champion 血统产物）
+tree-hsi-2026/outputs/**/tensorboard/

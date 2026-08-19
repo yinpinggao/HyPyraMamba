@@ -96,6 +96,29 @@ def build_supervision(config: dict[str, object]) -> tuple[np.ndarray, np.ndarray
         supervision[holdout] = 0
         validation = np.where(holdout, val, 0).astype(np.uint8)
         return supervision, validation, "train + spatial 90% val -> spatial 10% val"
+    if mode == "component_fold":
+        fold_path = resolve_path(str(config["domain_fold_path"]))
+        with np.load(fold_path) as payload:
+            supervision = np.asarray(payload["supervision"], dtype=np.uint8)
+            validation = np.asarray(payload["validation"], dtype=np.uint8)
+        if supervision.shape != combined.shape or validation.shape != combined.shape:
+            raise ValueError(
+                f"Domain fold shape mismatch: supervision={supervision.shape}, "
+                f"validation={validation.shape}, expected={combined.shape}"
+            )
+        if np.any((supervision > 0) & (validation > 0)):
+            raise ValueError(f"Domain fold overlaps supervision and validation: {fold_path}")
+        if not np.array_equal(
+            validation[validation > 0], val[validation > 0]
+        ):
+            raise ValueError(f"Domain fold validation labels differ from official val: {fold_path}")
+        buffered_labels = (combined > 0) & (supervision == 0) & (validation == 0)
+        protocol = (
+            f"component-isolated domain fold {fold_path.name}; "
+            f"validation={int((validation > 0).sum())}; "
+            f"buffered labels={int(buffered_labels.sum())}"
+        )
+        return supervision, validation, protocol
     if mode == "refit_all":
         return combined, None, "train + all val; fixed-epoch final refit"
     raise ValueError(f"Unsupported training_mode={mode}")
@@ -462,6 +485,18 @@ def main() -> None:
                 int(config["tile_size"]), device, amp_dtype, None, seed,
             )
             (output_dir / "full_val_metrics.json").write_text(json.dumps(best_metrics, indent=2))
+            (output_dir / "selection_summary.json").write_text(
+                json.dumps(
+                    {
+                        "best_epoch": best_epoch,
+                        "oa": best_metrics["oa"],
+                        "aa": best_metrics["aa"],
+                        "kappa": best_metrics["kappa"],
+                        "protocol": protocol,
+                    },
+                    indent=2,
+                )
+            )
             print(
                 f"full_val best_epoch={best_epoch} OA={best_metrics['oa']:.6f} "
                 f"AA={best_metrics['aa']:.6f} Kappa={best_metrics['kappa']:.6f} infer_s={full_s:.1f}", flush=True

@@ -1,0 +1,48 @@
+model: m5
+model_name: hypersigma_dense_domain_component_fold0
+upstream_commit: 07e9ea24e3072fcb5c3a92a2bcb8185e43b295b9
+upstream_source: third_party/HyperSIGMA/ImageClassification/model/ss_fusion_seg.py
+training_mode: component_fold
+holdout_block_size: 128
+holdout_fraction: 0.1
+seed: 0
+tile_size: 128
+tile_overlap: 32
+batch_size: 8
+num_workers: 4
+samples_per_epoch: 2048
+epochs: 60
+patience: 10
+validate_every: 10
+monitor_tiles: 64
+train_augment: true
+amp_dtype: bfloat16
+weight_decay: 0.05
+label_smoothing: 0.05
+gradient_clip: 1.0
+class_weight: null
+hypersigma:
+  spatial_patch_size: 8
+  spatial_checkpoint: /data2/gyp/HyPyraMamba/tree-hsi-2026/outputs/m5_domain_source_scenealign/spatial_mae.pt
+  spectral_checkpoint: /data2/gyp/HyPyraMamba/tree-hsi-2026/outputs/m5_domain_source_scenealign/spectral_mae.pt
+  head_lr: 6.0e-05
+  embedding_lr: 3.0e-05
+  backbone_lr: 6.0e-06
+  layer_decay: 0.9
+  head_warmup_epochs: 5
+  top4_until_epoch: 15
+  warmup_ratio: 0.05
+data:
+  spatial_cache: /data2/gyp/HyPyraMamba/tree-hsi-2026/data/cache/hypersigma_source_scenealign/train_domain_pca30_float16.npy
+  spectral_cache: /data2/gyp/HyPyraMamba/tree-hsi-2026/data/cache/hypersigma_source_scenealign/train_domain_native98_float16.npy
+  train_label: ../HypraMamba/data/TreeSpeciesHSI/train_label.mat
+  val_label: ../HypraMamba/data/TreeSpeciesHSI/val_label.mat
+output_root: /data2/gyp/HyPyraMamba/tree-hsi-2026/outputs/m5_domain_component_fold0
+domain_fold_path: /data2/gyp/HyPyraMamba/tree-hsi-2026/outputs/domain_validation/component512_buffer64/fold0.npz
+inference_data:
+  scene1:
+    spatial_cache: /data2/gyp/HyPyraMamba/tree-hsi-2026/data/cache/hypersigma_source_scenealign/scene1_domain_pca30_float16.npy
+    spectral_cache: /data2/gyp/HyPyraMamba/tree-hsi-2026/data/cache/hypersigma_source_scenealign/scene1_domain_native98_float16.npy
+  scene2:
+    spatial_cache: /data2/gyp/HyPyraMamba/tree-hsi-2026/data/cache/hypersigma_source_scenealign/scene2_domain_pca30_float16.npy
+    spectral_cache: /data2/gyp/HyPyraMamba/tree-hsi-2026/data/cache/hypersigma_source_scenealign/scene2_domain_native98_float16.npy

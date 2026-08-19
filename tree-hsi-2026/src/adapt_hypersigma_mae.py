@@ -130,6 +130,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--branch", choices=("spatial", "spectral"), required=True)
     parser.add_argument("--cache-dir", type=Path, default=PROJECT_ROOT / "data/cache")
+    parser.add_argument(
+        "--cache-path",
+        action="append",
+        default=None,
+        help="Explicit unlabeled cache path; repeat for source/scene caches.",
+    )
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--image-size", type=int, default=64)
@@ -152,10 +158,14 @@ def main() -> None:
     torch.backends.cudnn.benchmark = True
 
     suffix = "pca30" if args.branch == "spatial" else "native98"
-    paths = [
-        args.cache_dir / f"{scene}_hsmax_{suffix}_float16.npy"
-        for scene in ("train", "scene1", "scene2")
-    ]
+    paths = (
+        [Path(item).resolve() for item in args.cache_path]
+        if args.cache_path
+        else [
+            args.cache_dir / f"{scene}_hsmax_{suffix}_float16.npy"
+            for scene in ("train", "scene1", "scene2")
+        ]
+    )
     missing = [str(path) for path in paths if not path.is_file()]
     if missing:
         raise FileNotFoundError(f"Missing robust caches: {missing}")

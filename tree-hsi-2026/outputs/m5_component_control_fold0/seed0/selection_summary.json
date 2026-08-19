@@ -1,0 +1,7 @@
+{
+  "best_epoch": 40,
+  "oa": 0.6998518255097202,
+  "aa": 0.6267768267503686,
+  "kappa": 0.6635300667434141,
+  "protocol": "component-isolated domain fold fold0.npz; validation=168720; buffered labels=223221"
+}
