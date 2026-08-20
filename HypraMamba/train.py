@@ -32,6 +32,7 @@ os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:64,garbage_collection
 FUSION_NAME = 'competitive'
 QUH_DATASETS = {'QUH-Pingan', 'QUH-Qingyun', 'QUH-Tangdaowan'}
 TREE_SPECIES_DATASETS = {data_load_operate.TREE_SPECIES_DATASET}
+VALID_SPECTRAL_DIFF_STAGES = {'none', 'latent', 'raw'}
 
 
 def vis_a_image(gt_vis, pred_vis, save_single_predict_path, save_single_gt_path, only_vis_label=False):
@@ -155,6 +156,19 @@ def parse_int_list(value):
     return values
 
 
+def apply_raw_spectral_difference(data, alpha):
+    """Inject first-order differences along the original wavelength axis.
+
+    ``data`` is expected to use HWC layout.  The final wavelength has a zero
+    difference so that its value is preserved and the channel count is kept.
+    """
+    if data.ndim != 3:
+        raise ValueError('Raw spectral difference expects an HWC cube.')
+    diff = np.zeros_like(data, dtype=np.float32)
+    diff[:, :, :-1] = data[:, :, 1:] - data[:, :, :-1]
+    return data + float(alpha) * diff
+
+
 def validate_args(args, parser):
     positive_int_fields = [
         'pca_components',
@@ -186,6 +200,10 @@ def validate_args(args, parser):
         parser.error('--gaussian_sigma must be non-negative.')
     if args.gaussian_spectral_sigma is not None and args.gaussian_spectral_sigma < 0:
         parser.error('--gaussian_spectral_sigma must be non-negative.')
+    if args.spectral_diff_stage not in VALID_SPECTRAL_DIFF_STAGES:
+        parser.error('--spectral_diff_stage must be one of: {}.'.format(
+            ', '.join(sorted(VALID_SPECTRAL_DIFF_STAGES))
+        ))
     if not 0.0 < args.spectral_fusion_scale <= 1.0:
         parser.error('--spectral_fusion_scale must be within (0, 1].')
     if args.stretch_low < 0 or args.stretch_high > 100:
@@ -260,6 +278,12 @@ def get_parser():
         help='Set false during hyperparameter screening to avoid evaluating the test set.'
     )
     parser.add_argument('--pca_components', type=int, default=30)
+    parser.add_argument(
+        '--use_pca',
+        type=str2bool,
+        default=True,
+        help='Whether to apply PCA before percentile stretching and embedding.'
+    )
     parser.add_argument('--gaussian_sigma', type=float, default=1.0)
     parser.add_argument(
         '--gaussian_spectral_sigma',
@@ -294,6 +318,17 @@ def get_parser():
     parser.add_argument('--outer_residual_mode', type=str, default='standard', choices=sorted(VALID_OUTER_RESIDUAL_MODES))
     parser.add_argument('--outer_residual_alpha', type=float, default=1.0)
     parser.add_argument('--spectral_diff_alpha', type=float, default=0.5)
+    parser.add_argument(
+        '--spectral_diff_stage',
+        type=str,
+        default='latent',
+        choices=sorted(VALID_SPECTRAL_DIFF_STAGES),
+        help=(
+            'Difference location: latent applies the model DGS difference after '
+            'embedding, raw applies it on original wavelength channels before PCA, '
+            'and none disables differential enhancement.'
+        )
+    )
     parser.add_argument('--spectral_fusion_scale', type=float, default=1.0)
     parser.add_argument('--tile_size', type=int, default=512)
     parser.add_argument('--tile_overlap', type=int, default=32)
@@ -340,8 +375,17 @@ else:
     outer_residual_tag = 'outer_alpha{}'.format(format_float_for_name(args.outer_residual_alpha))
 
 save_net_base = base_save_net_name if outer_residual_tag == '' else '{}_{}'.format(base_save_net_name, outer_residual_tag)
-if args.spectral_diff_alpha != 1.0:
+if args.spectral_diff_stage == 'raw':
+    save_net_base = '{}_raw_diff_alpha{}'.format(
+        save_net_base,
+        format_float_for_name(args.spectral_diff_alpha),
+    )
+elif args.spectral_diff_stage == 'none':
+    save_net_base = '{}_no_diff'.format(save_net_base)
+elif args.spectral_diff_alpha != 1.0:
     save_net_base = '{}_diff_alpha{}'.format(save_net_base, format_float_for_name(args.spectral_diff_alpha))
+if not args.use_pca:
+    save_net_base = '{}_no_pca'.format(save_net_base)
 if args.spectral_fusion_scale != 1.0:
     save_net_base = '{}_spe_scale{}'.format(
         save_net_base,
@@ -405,6 +449,7 @@ paras_dict = {
     'checkpoint_tie_break': args.checkpoint_tie_break,
     'evaluate_test': args.evaluate_test,
     'pca_components': args.pca_components,
+    'use_pca': args.use_pca,
     'gaussian_sigma': args.gaussian_sigma,
     'gaussian_spectral_sigma': (
         args.gaussian_sigma
@@ -434,6 +479,7 @@ paras_dict = {
     'outer_residual_mode': args.outer_residual_mode,
     'outer_residual_alpha': args.outer_residual_alpha,
     'spectral_diff_alpha': args.spectral_diff_alpha,
+    'spectral_diff_stage': args.spectral_diff_stage,
     'spectral_fusion_scale': args.spectral_fusion_scale,
     'tile_size': tile_size,
     'tile_overlap': tile_overlap,
@@ -451,6 +497,7 @@ model_kwargs = {
     'outer_residual_mode': args.outer_residual_mode,
     'outer_residual_alpha': args.outer_residual_alpha,
     'spectral_diff_alpha': args.spectral_diff_alpha,
+    'enable_spectral_diff': args.spectral_diff_stage == 'latent',
     'spectral_fusion_scale': args.spectral_fusion_scale,
     'pool_size': args.pool_size,
     'high_res_skip': args.high_res_skip,
@@ -688,7 +735,7 @@ if __name__ == '__main__':
     data = np.asarray(data, dtype=np.float32)
     gt = np.asarray(gt)
 
-    if args.pca_components > data.shape[2]:
+    if args.use_pca and args.pca_components > data.shape[2]:
         raise ValueError('--pca_components must be <= input channel count {}.'.format(data.shape[2]))
 
     gaussian_spectral_sigma = (
@@ -710,38 +757,79 @@ if __name__ == '__main__':
     logger.info('Loaded cube shape={} dtype={} label_shape={}'.format(data.shape, data.dtype, gt.shape))
     data_filtered = gaussian_filter(data, sigma=gaussian_sigmas)
 
-    logger.info('PCA enabled: pca_components={}'.format(args.pca_components))
-    pca = PCA(n_components=args.pca_components)
-    data_reshaped = data_filtered.reshape(-1, data_filtered.shape[2])
-    data_pca = pca.fit_transform(data_reshaped)
-    data_pca = data_pca.reshape(data_filtered.shape[0], data_filtered.shape[1], -1)
+    if args.spectral_diff_stage == 'raw':
+        logger.info(
+            'Raw wavelength difference enabled before PCA: alpha={}'.format(
+                args.spectral_diff_alpha
+            )
+        )
+        data_pre_pca = apply_raw_spectral_difference(
+            data_filtered,
+            args.spectral_diff_alpha,
+        )
+    else:
+        data_pre_pca = data_filtered
+        logger.info('Raw wavelength difference disabled.')
 
-    height, width, channels = data_pca.shape
+    if args.use_pca:
+        logger.info('PCA enabled: pca_components={}'.format(args.pca_components))
+        pca = PCA(n_components=args.pca_components)
+        data_reshaped = data_pre_pca.reshape(-1, data_pre_pca.shape[2])
+        data_features = pca.fit_transform(data_reshaped)
+        data_features = data_features.reshape(
+            data_pre_pca.shape[0],
+            data_pre_pca.shape[1],
+            -1,
+        ).astype(np.float32, copy=False)
+        pca_components = pca.components_.astype(np.float32)
+        pca_mean = pca.mean_.astype(np.float32)
+        pca_explained_variance = np.asarray(pca.explained_variance_, dtype=np.float32)
+        pca_explained_variance_ratio = np.asarray(
+            pca.explained_variance_ratio_,
+            dtype=np.float32,
+        )
+        saved_pca_components_n = args.pca_components
+    else:
+        logger.info('PCA disabled: retaining {} input bands.'.format(data_pre_pca.shape[2]))
+        pca = None
+        data_features = np.asarray(data_pre_pca, dtype=np.float32)
+        pca_components = np.empty((0, data_pre_pca.shape[2]), dtype=np.float32)
+        pca_mean = np.empty((0,), dtype=np.float32)
+        pca_explained_variance = np.empty((0,), dtype=np.float32)
+        pca_explained_variance_ratio = np.empty((0,), dtype=np.float32)
+        saved_pca_components_n = 0
+
+    height, width, channels = data_features.shape
     gt_reshape = gt.reshape(-1)
-    img = ImageStretching(data_pca, low=args.stretch_low, high=args.stretch_high)
+    img = ImageStretching(data_features, low=args.stretch_low, high=args.stretch_high)
     class_count = int(max(np.unique(gt)))
 
     preprocess_path = os.path.join(save_folder, 'preprocess_tr{}_val{}.npz'.format(num_list[0], num_list[1]))
-    # Persist train-scene PCA so competition test cubes can reuse the same projection.
+    # Persist the exact preprocessing state for reproducible evaluation/inference.
     stretch_mins = []
     stretch_maxs = []
-    for band_idx in range(data_pca.shape[2]):
-        band = data_pca[:, :, band_idx]
+    for band_idx in range(data_features.shape[2]):
+        band = data_features[:, :, band_idx]
         stretch_mins.append(np.percentile(band, args.stretch_low))
         stretch_maxs.append(np.percentile(band, args.stretch_high))
     np.savez(
         preprocess_path,
-        pca_components=pca.components_.astype(np.float32),
-        pca_mean=pca.mean_.astype(np.float32),
-        explained_variance_=np.asarray(pca.explained_variance_, dtype=np.float32),
-        explained_variance_ratio_=np.asarray(pca.explained_variance_ratio_, dtype=np.float32),
+        pca_enabled=np.bool_(args.use_pca),
+        pca_components=pca_components,
+        pca_mean=pca_mean,
+        explained_variance_=pca_explained_variance,
+        explained_variance_ratio_=pca_explained_variance_ratio,
         stretch_mins=np.asarray(stretch_mins, dtype=np.float32),
         stretch_maxs=np.asarray(stretch_maxs, dtype=np.float32),
         gaussian_sigma=np.float32(args.gaussian_sigma),
         gaussian_spectral_sigma=np.float32(gaussian_spectral_sigma),
+        spectral_diff_stage=np.asarray(args.spectral_diff_stage),
+        spectral_diff_alpha=np.float32(args.spectral_diff_alpha),
         stretch_low=np.float32(args.stretch_low),
         stretch_high=np.float32(args.stretch_high),
-        pca_components_n=np.int32(args.pca_components),
+        pca_components_n=np.int32(saved_pca_components_n),
+        original_channels=np.int32(data.shape[2]),
+        model_input_channels=np.int32(channels),
         class_count=np.int32(class_count),
     )
     import json

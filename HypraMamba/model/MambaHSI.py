@@ -235,13 +235,17 @@ class PyramidRefinedChannelAttention(nn.Module):
 
 class ImprovedSpeMamba(nn.Module):
     def __init__(self, channels, token_num=4, use_residual=True, group_num=4,
-                 ablation='full', spectral_diff_alpha=1.0, mamba_d_state=16,
+                 ablation='full', spectral_diff_alpha=1.0, enable_spectral_diff=True,
+                 mamba_d_state=16,
                  mamba_d_conv=4, mamba_expand=2):
         super(ImprovedSpeMamba, self).__init__()
         self.ablation = _validate_ablation(ablation)
         self.token_num = token_num
         self.use_residual = use_residual
-        self.use_diff_enhance = self.ablation not in SPECTRAL_DIFF_DISABLED_ABLATIONS
+        self.use_diff_enhance = (
+            bool(enable_spectral_diff)
+            and self.ablation not in SPECTRAL_DIFF_DISABLED_ABLATIONS
+        )
         self.spectral_diff_alpha = float(spectral_diff_alpha)
         # Set group_channel_num based on token_num and channels
         self.group_channel_num = math.ceil(channels / token_num)
@@ -295,8 +299,9 @@ class ImprovedSpeMamba(nn.Module):
         x_out = x_out.reshape(B, H, W, C).permute(0, 3, 1, 2).contiguous()
         # Apply the final projection to map the feature map to the output space
         x_out = self.proj(x_out)[:, :origin_c, :, :]
-        # Use the differential feature as the spectral residual to match DGS-Mamba.
-        return x_out + x_diff if self.use_residual else x_out
+        # Use the original embedded feature as the spectral residual, as defined
+        # by the DGS-Mamba formulation in the paper.
+        return x_out + x if self.use_residual else x_out
 
 
 class LightSpatialPrior(nn.Module):
@@ -424,6 +429,7 @@ class ImprovedBothMamba(nn.Module):
     def __init__(self, channels, token_num, use_residual, group_num=4, pyramid_dilation=2,
                  ablation='full', outer_residual_mode='standard', outer_residual_alpha=1.0,
                  spectral_diff_alpha=1.0, spectral_fusion_scale=1.0,
+                 enable_spectral_diff=True,
                  prca_num_scales=3, prca_num_layers=2,
                  prca_num_heads=4, lsp_reduction=4, spa_mamba_d_state=16,
                  spa_mamba_d_conv=4, spa_mamba_expand=2, spe_mamba_d_state=16,
@@ -465,6 +471,7 @@ class ImprovedBothMamba(nn.Module):
                 group_num=group_num,
                 ablation=ablation,
                 spectral_diff_alpha=spectral_diff_alpha,
+                enable_spectral_diff=enable_spectral_diff,
                 mamba_d_state=spe_mamba_d_state,
                 mamba_d_conv=spe_mamba_d_conv,
                 mamba_expand=spe_mamba_expand,
@@ -514,6 +521,7 @@ class ImprovedMambaHSI(nn.Module):
                  token_num=4, group_num=4, pyramid_dilation=(2, 3), ablation='full',
                  outer_residual_mode='standard', outer_residual_alpha=1.0,
                  spectral_diff_alpha=1.0, spectral_fusion_scale=1.0,
+                 enable_spectral_diff=True,
                  pool_size=2, cls_head_dim=128,
                  prca_num_scales=3, prca_num_layers=2, prca_num_heads=4,
                  lsp_reduction=4, spa_mamba_d_state=16, spa_mamba_d_conv=4,
@@ -557,6 +565,7 @@ class ImprovedMambaHSI(nn.Module):
             outer_residual_alpha=outer_residual_alpha,
             spectral_diff_alpha=spectral_diff_alpha,
             spectral_fusion_scale=spectral_fusion_scale,
+            enable_spectral_diff=enable_spectral_diff,
             prca_num_scales=prca_num_scales,
             prca_num_layers=prca_num_layers,
             prca_num_heads=prca_num_heads,
