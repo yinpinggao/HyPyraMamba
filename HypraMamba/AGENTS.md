@@ -102,6 +102,11 @@ Supported ablations in `model/MambaHSI.py` are:
 - The default training configuration (`hidden_dim=128`, `token_num=4`, `group_num=4`, `num_heads=4`) satisfies those divisibility assumptions. Non-divisible experimental settings can still fail at `GroupNorm` or `einops.rearrange`.
 - `GradScaler` is initialized independently for every seed. Do not move it back to module scope, because scaler state must not leak across seed runs.
 
+## Tile Mode Notes
+- Per-epoch validation only propagates the tiles that contain validation pixels (`val_tile_slices`). Tiles without validation pixels cannot change any validation metric, so this is exact, not an approximation. Test evaluation still sweeps every tile. When `--save_vis true` triggers a periodic map, that epoch falls back to the full tile list.
+- `--tile_batch_size` (default `1`) batches equally sized tiles into one forward pass. Because the model has no cross-sample operations and the per-tile loss is a mean over that tile's labeled pixels, weighting a batch by its labeled-pixel share reproduces the tile-by-tile gradient exactly; only AMP reduction order differs. Keep the default for main-line runs and raise it for small-tile experiments, where launch overhead dominates.
+- Context-restricted protocol (reviewer comment on spatial context): `tools/run_context_protocol.sh` runs `--tile_size P --tile_overlap 0` for `P` in `16 32 64 128` on LongKou/Qingyun/Tangdaowan with seeds `0,1,2`, writing to `RUNS_CONTEXT_PROTOCOL_P<size>`. Training only propagates blocks containing training pixels, so no test-region data is seen at training time, making `P=16` a patch-equivalent inductive protocol. Everything except `tile_size`/`tile_overlap`/`tile_batch_size` matches the main configuration, so the number of optimizer steps per epoch is unchanged and spatial context is the only variable.
+
 ## Validation-Only Tuning
 Hyperparameter search must not evaluate the test set. Use `--evaluate_test false`; this writes `validation_result_tr100_val30.txt` per seed and `mean_validation_result.txt` per dataset, and deliberately does not write `result_tr100_val30.txt` or `mean_result.txt`.
 

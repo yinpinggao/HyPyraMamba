@@ -12,6 +12,12 @@ __pycache__/
 # 忽略可视化结果
 *.png
 
+# 忽略 PDF 文档
+*.pdf
+
+# 忽略数据集软链接（指向已忽略的 data/）
+HypraMamba/QUH-*
+
 # 忽略评估结果文本
 result_*.txt
 *.wmf

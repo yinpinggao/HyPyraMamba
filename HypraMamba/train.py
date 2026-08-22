@@ -192,6 +192,8 @@ def validate_args(args, parser):
         if getattr(args, field) <= 0:
             parser.error('--{} must be a positive integer.'.format(field))
 
+    if args.tile_batch_size <= 0:
+        parser.error('--tile_batch_size must be a positive integer.')
     if args.weight_decay < 0:
         parser.error('--weight_decay must be non-negative.')
     if args.cosine_eta_min < 0:
@@ -333,6 +335,17 @@ def get_parser():
     parser.add_argument('--tile_size', type=int, default=512)
     parser.add_argument('--tile_overlap', type=int, default=32)
     parser.add_argument('--tile_update_groups', type=int, default=2)
+    parser.add_argument(
+        '--tile_batch_size',
+        type=int,
+        default=1,
+        help=(
+            'Number of equally sized tiles processed in one forward pass. The '
+            'default of 1 reproduces the historical tile-by-tile behaviour; '
+            'larger values give the same gradients and predictions but cut the '
+            'per-tile launch overhead, which dominates for small tiles.'
+        )
+    )
     parser.add_argument(
         '--tree_species_train_on',
         type=str,
@@ -484,6 +497,7 @@ paras_dict = {
     'tile_size': tile_size,
     'tile_overlap': tile_overlap,
     'tile_update_groups': args.tile_update_groups,
+    'tile_batch_size': args.tile_batch_size,
     'save_vis': args.save_vis,
 }
 
@@ -599,6 +613,28 @@ def _build_balanced_tile_groups(train_tiles, group_count):
     return [group for group in groups if len(group) > 0]
 
 
+def _iter_tile_batches(tile_entries, batch_size):
+    """Yield consecutive runs of equally shaped tiles, chunked to batch_size.
+
+    Every tile produced by generate_tile_slices has the full tile size except
+    when the scene itself is smaller, so batching is exact; the shape check only
+    guards against mixing sizes if that ever changes.
+    """
+    batch_size = max(1, int(batch_size))
+    batch = []
+    batch_shape = None
+    for entry in tile_entries:
+        y0, y1, x0, x1 = entry[0]
+        shape = (y1 - y0, x1 - x0)
+        if batch_shape is not None and (shape != batch_shape or len(batch) >= batch_size):
+            yield batch
+            batch = []
+        batch_shape = shape
+        batch.append(entry)
+    if batch:
+        yield batch
+
+
 def train_one_epoch_tiled(
         net,
         x_cpu,
@@ -607,7 +643,8 @@ def train_one_epoch_tiled(
         loss_func,
         optimizer,
         tile_update_groups,
-        grad_scaler):
+        grad_scaler,
+        tile_batch_size=1):
     train_tiles = []
     for tile_slice in tile_slices:
         valid_pixels = count_labeled_pixels_in_tile(train_label_cpu, tile_slice)
@@ -630,10 +667,20 @@ def train_one_epoch_tiled(
             continue
 
         optimizer.zero_grad(set_to_none=True)
-        for tile_slice, valid_pixels in tile_group:
-            y0, y1, x0, x1 = tile_slice
-            input_tile = x_cpu[:, :, y0:y1, x0:x1].to(device)
-            label_tile = y_train[:, y0:y1, x0:x1].to(device)
+        # Tiles are independent (no cross-sample ops in the model), and the
+        # per-tile loss is a mean over that tile's labeled pixels, so batching
+        # tiles and weighting by the batch's labeled-pixel share yields exactly
+        # the same accumulated gradient as looping tile by tile.
+        for tile_batch in _iter_tile_batches(tile_group, tile_batch_size):
+            batch_valid_pixels = sum(valid_pixels for _, valid_pixels in tile_batch)
+            input_tile = torch.cat(
+                [x_cpu[:, :, y0:y1, x0:x1] for (y0, y1, x0, x1), _ in tile_batch],
+                dim=0
+            ).to(device)
+            label_tile = torch.cat(
+                [y_train[:, y0:y1, x0:x1] for (y0, y1, x0, x1), _ in tile_batch],
+                dim=0
+            ).to(device)
 
             with autocast(enabled=device.type == 'cuda'):
                 loss = compute_train_loss(
@@ -642,13 +689,13 @@ def train_one_epoch_tiled(
                     label_tile,
                     loss_func
                 )
-                group_loss_weight = valid_pixels / group_valid_pixels
+                group_loss_weight = batch_valid_pixels / group_valid_pixels
                 weighted_loss = loss * group_loss_weight
 
             grad_scaler.scale(weighted_loss).backward()
 
-            total_loss += float(loss.detach().cpu()) * (valid_pixels / total_valid_pixels)
-            used_tiles += 1
+            total_loss += float(loss.detach().cpu()) * (batch_valid_pixels / total_valid_pixels)
+            used_tiles += len(tile_batch)
 
             del input_tile, label_tile, loss, weighted_loss
 
@@ -659,14 +706,18 @@ def train_one_epoch_tiled(
     return total_loss, used_tiles, used_groups
 
 
-def predict_tiled(net, x_cpu, tile_slices, class_count, output_size):
+def predict_tiled(net, x_cpu, tile_slices, class_count, output_size, tile_batch_size=1):
     height, width = output_size
     logit_sum = np.zeros((class_count, height, width), dtype=np.float32)
     logit_count = np.zeros((height, width), dtype=np.float32)
 
-    for tile_slice in tile_slices:
-        y0, y1, x0, x1 = tile_slice
-        input_tile = x_cpu[:, :, y0:y1, x0:x1].to(device)
+    for tile_batch in _iter_tile_batches([(tile_slice,) for tile_slice in tile_slices], tile_batch_size):
+        batch_slices = [entry[0] for entry in tile_batch]
+        y0, y1, x0, x1 = batch_slices[0]
+        input_tile = torch.cat(
+            [x_cpu[:, :, ty0:ty1, tx0:tx1] for ty0, ty1, tx0, tx1 in batch_slices],
+            dim=0
+        ).to(device)
 
         with autocast(enabled=device.type == 'cuda'):
             output_tile = net(input_tile)
@@ -677,10 +728,12 @@ def predict_tiled(net, x_cpu, tile_slices, class_count, output_size):
                 align_corners=True
             )
 
-        logit_sum[:, y0:y1, x0:x1] += seg_logits_tile.squeeze(0).float().cpu().numpy()
-        logit_count[y0:y1, x0:x1] += 1.0
+        seg_logits_np = seg_logits_tile.float().cpu().numpy()
+        for batch_idx, (ty0, ty1, tx0, tx1) in enumerate(batch_slices):
+            logit_sum[:, ty0:ty1, tx0:tx1] += seg_logits_np[batch_idx]
+            logit_count[ty0:ty1, tx0:tx1] += 1.0
 
-        del input_tile, output_tile, seg_logits_tile
+        del input_tile, output_tile, seg_logits_tile, seg_logits_np
 
     logit_sum /= np.maximum(logit_count[None, :, :], 1.0)
     return np.expand_dims(np.argmax(logit_sum, axis=0), axis=0)
@@ -949,16 +1002,25 @@ if __name__ == '__main__':
         if use_tile_mode:
             tile_slices = generate_tile_slices(height, width, tile_size, tile_overlap)
             train_tile_slices = tile_slices
+            # Tiles without validation pixels cannot change any validation metric,
+            # so skipping them keeps per-epoch scoring identical while avoiding a
+            # full-scene sweep (which dominates runtime for small tiles).
+            val_tile_slices = [
+                tile_slice for tile_slice in tile_slices
+                if count_labeled_pixels_in_tile(val_label, tile_slice) > 0
+            ]
             logger.info(
-                'Tile mode enabled: tile_size={} tile_overlap={} tile_count={}'.format(
+                'Tile mode enabled: tile_size={} tile_overlap={} tile_count={} val_tile_count={}'.format(
                     tile_size,
                     tile_overlap,
-                    len(tile_slices)
+                    len(tile_slices),
+                    len(val_tile_slices)
                 )
             )
         else:
             tile_slices = None
             train_tile_slices = None
+            val_tile_slices = None
             x = x.to(device)
 
         class_weights, class_counts = build_loss_weights(
@@ -1042,6 +1104,7 @@ if __name__ == '__main__':
                     optimizer,
                     args.tile_update_groups,
                     grad_scaler,
+                    args.tile_batch_size,
                 )
                 logger.info(
                     'Iter:{}|cls_loss:{}|tiles:{}|tile_update_groups:{}'.format(
@@ -1152,7 +1215,16 @@ if __name__ == '__main__':
                 evaluator.reset()
                 y_val = val_label.unsqueeze(0)
                 if use_tile_mode:
-                    predict = predict_tiled(net, x, tile_slices, class_count, y_val.shape[1:])
+                    # Periodic visualization needs a full-scene map; scoring does not.
+                    scoring_tile_slices = tile_slices if need_val_vis else val_tile_slices
+                    predict = predict_tiled(
+                        net,
+                        x,
+                        scoring_tile_slices,
+                        class_count,
+                        y_val.shape[1:],
+                        args.tile_batch_size,
+                    )
                 else:
                     output_val = net(x)
                     seg_logits = resize(input=output_val, size=y_val.shape[1:], mode='bilinear',
@@ -1278,7 +1350,14 @@ if __name__ == '__main__':
             test_evaluator.reset()
             y_test = test_label.unsqueeze(0)
             if use_tile_mode:
-                predict_test = predict_tiled(best_net, x, tile_slices, class_count, y_test.shape[1:])
+                predict_test = predict_tiled(
+                    best_net,
+                    x,
+                    tile_slices,
+                    class_count,
+                    y_test.shape[1:],
+                    args.tile_batch_size,
+                )
             else:
                 output_test = best_net(x)
                 seg_logits_test = resize(input=output_test, size=y_test.shape[1:], mode='bilinear', align_corners=True)
