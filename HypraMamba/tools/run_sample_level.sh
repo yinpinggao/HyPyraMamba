@@ -83,7 +83,7 @@ IFS=',' read -r -a G <<< "${GPU_IDS}"
 echo "tasks=${#TASKS[@]} gpus=${G[*]} seeds=${SEEDS}"
 for i in "${!G[@]}"; do
   nohup bash "$0" --worker "${G[i]}" "${i}" "${#G[@]}" \
-    > "logs/sample_level/queue_gpu${G[i]}.log" 2>&1 &
+    > "logs/sample_level/queue_gpu${G[i]}_w${i}.log" 2>&1 &
 done
 wait
 echo "ALL DONE"
